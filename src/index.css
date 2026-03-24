@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream-bg: #FDFBF7;
+  --color-cream-card: #FFF9F0;
+  --color-cream-border: #E6D5C3;
+  --color-cream-text: #5D4037;
+  --color-cream-accent: #D7CCC8;
+  
+  --font-sans: "Inter", "Noto Sans SC", "Noto Sans JP", sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-cream-bg text-cream-text font-sans;
+    background-image: radial-gradient(#E6D5C3 0.5px, transparent 0.5px);
+    background-size: 20px 20px;
+  }
+}
+
+@layer components {
+  .stitched-border {
+    @apply border-2 border-cream-border relative;
+    border-style: dashed;
+  }
+  
+  .stitched-card {
+    @apply bg-cream-card rounded-3xl p-4 shadow-lg border-2 border-cream-border;
+    box-shadow: 0 8px 0px -2px rgba(230, 213, 195, 0.5);
+    border-style: dashed;
+  }
+
+  .fumo-shadow {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+  }
+  
+  .cream-input {
+    @apply bg-white rounded-full px-4 py-2 border-2 border-cream-border focus:outline-none focus:ring-2 focus:ring-cream-accent transition-all;
+    border-style: dashed;
+  }
+}
+
+/* Custom scrollbar for that soft look */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #E6D5C3;
+  border-radius: 10px;
+}
