@@ -6,6 +6,8 @@
 
 [English](README.md) · **简体中文**
 
+**在线演示：** [fumofumo.life](https://www.fumofumo.life/)
+
 <img src="assets/hero.png" alt="Fumo² Life" width="100%" />
 
 </div>
