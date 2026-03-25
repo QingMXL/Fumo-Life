@@ -11,9 +11,13 @@ const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 const CHAT_STORAGE_PREFIX = 'fumo-chat-';
 
-function loadStoredChat(characterId: string): Message[] | null {
+function chatStorageKey(characterId: string, language: Language) {
+  return `${CHAT_STORAGE_PREFIX}${characterId}:${language}`;
+}
+
+function loadStoredChat(characterId: string, language: Language): Message[] | null {
   try {
-    const raw = localStorage.getItem(CHAT_STORAGE_PREFIX + characterId);
+    const raw = localStorage.getItem(chatStorageKey(characterId, language));
     if (!raw) return null;
     const arr = JSON.parse(raw) as Array<Omit<Message, 'timestamp'> & { timestamp: string }>;
     return arr.map(m => ({ ...m, timestamp: new Date(m.timestamp) }));
@@ -22,9 +26,9 @@ function loadStoredChat(characterId: string): Message[] | null {
   }
 }
 
-function saveStoredChat(characterId: string, msgs: Message[]) {
+function saveStoredChat(characterId: string, language: Language, msgs: Message[]) {
   localStorage.setItem(
-    CHAT_STORAGE_PREFIX + characterId,
+    chatStorageKey(characterId, language),
     JSON.stringify(msgs.map(m => ({ ...m, timestamp: m.timestamp.toISOString() })))
   );
 }
@@ -46,7 +50,7 @@ function buildUnreadSeed(fumo: Character, lang: Language): Message[] {
       id: `unread-${fumo.id}-${i}`,
       characterId: fumo.id,
       sender: 'fumo',
-      text: last ? (fumo.lastMessage ?? filler) : filler,
+      text: last ? (fumo.lastMessage?.[lang] ?? filler) : filler,
       timestamp: new Date(Date.now() - (n - 1 - i) * 70_000),
     });
   }
@@ -58,6 +62,7 @@ interface ChatPageProps {
   characters: Character[];
   onUpdateBond: (id: string, amount: number) => void;
   onMarkChatRead: (id: string) => void;
+  onConversationMeta: (characterId: string, lastText: string, at: number) => void;
 }
 
 export const ChatPage: React.FC<ChatPageProps> = ({
@@ -65,6 +70,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   characters,
   onUpdateBond,
   onMarkChatRead,
+  onConversationMeta,
 }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -89,7 +95,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     onMarkChatRead(fumo.id);
     initialAnimCompleteRef.current = false;
 
-    const stored = loadStoredChat(fumo.id);
+    const stored = loadStoredChat(fumo.id, language);
     if (stored && stored.length > 0) {
       setMessages(stored);
       setRevealCount(stored.length);
@@ -115,12 +121,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       }
     }, 520);
     return () => window.clearInterval(interval);
-  }, [fumo?.id, onMarkChatRead]);
+  }, [fumo?.id, language, onMarkChatRead]);
 
   useEffect(() => {
     if (!fumo?.id || messages.length === 0) return;
-    saveStoredChat(fumo.id, messages);
-  }, [messages, fumo?.id]);
+    saveStoredChat(fumo.id, language, messages);
+  }, [messages, fumo?.id, language]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -165,6 +171,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       syncRevealForAppend(next.length);
       return next;
     });
+    onConversationMeta(fumo.id, giftMsg.text, giftMsg.timestamp.getTime());
     setShowGifts(false);
     
     // Update bond level
@@ -186,17 +193,38 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         syncRevealForAppend(next.length);
         return next;
       });
+      onConversationMeta(fumo.id, reply.text, reply.timestamp.getTime());
       setIsTyping(false);
     }, 1000);
   };
 
-  const handleCamera = async () => {
-    try {
-      await navigator.mediaDevices.getUserMedia({ video: true });
-      handleGenerateImage();
-    } catch (err) {
-      alert(language === 'zh' ? '请开放相机权限以拍照捏~' : 'Please grant camera permission~');
-    }
+  const handleCamera = () => {
+    if (!fumo) return;
+    const picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = 'image/*';
+    // On mobile, this typically offers camera / recent photos.
+    (picker as any).capture = 'environment';
+    picker.onchange = (e: any) => {
+      const file: File | undefined = e.target.files?.[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const msg: Message = {
+        id: Date.now().toString(),
+        characterId: fumo.id,
+        sender: 'user',
+        text: '',
+        timestamp: new Date(),
+        imageUrl: url,
+      };
+      setMessages(prev => {
+        const next = [...prev, msg];
+        syncRevealForAppend(next.length);
+        return next;
+      });
+      onConversationMeta(fumo.id, language === 'zh' ? '[图片]' : language === 'ja' ? '[画像]' : '[Photo]', msg.timestamp.getTime());
+    };
+    picker.click();
   };
 
   if (!fumo) return <div>Fumo not found</div>;
@@ -220,6 +248,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       syncRevealForAppend(next.length);
       return next;
     });
+    onConversationMeta(fumo.id, userMsg.text, userMsg.timestamp.getTime());
     setInput('');
     setIsTyping(true);
 
@@ -245,6 +274,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           syncRevealForAppend(next.length);
           return next;
         });
+        onConversationMeta(fumo.id, fumoMsg.text, fumoMsg.timestamp.getTime());
       }
     } catch (error) {
       console.error(error);
@@ -289,6 +319,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           syncRevealForAppend(next.length);
           return next;
         });
+        onConversationMeta(fumo.id, fumoMsg.text, fumoMsg.timestamp.getTime());
       }
     } catch (error) {
       console.error("Image generation failed:", error);

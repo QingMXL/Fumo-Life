@@ -34,6 +34,8 @@ export async function generateFumoResponse(
 
     [LANGUAGE SPECIFIC]
     - Language: ${language}
+    - CRITICAL: Respond strictly in the selected Language. Do NOT mix languages in a single reply.
+    - CRITICAL: Do NOT include English words/sentences when Language is zh or ja (except the fixed app name "Fumo² Life" if absolutely necessary).
     - If Japanese: Use appropriate pronouns (Reimu: 私, Marisa: 俺) and sentence endings (Marisa: だぜ).
     - If Chinese: Use natural, character-appropriate tone.
 

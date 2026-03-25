@@ -171,17 +171,20 @@ interface DiscoverPageProps {
   language: Language;
   userProfile: UserProfile;
   characters: Character[];
+  onUnreadCountChange: (count: number) => void;
 }
 
 export const DiscoverPage: React.FC<DiscoverPageProps> = ({
   language,
   userProfile,
   characters,
+  onUnreadCountChange,
 }) => {
   const [moments, setMoments] = useState<Moment[]>(MOCK_MOMENTS);
 
   const [showPostModal, setShowPostModal] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
+  const [newPostImageUrl, setNewPostImageUrl] = useState<string | null>(null);
   const [likedMoments, setLikedMoments] = useState<Set<string>>(new Set());
   const [commentInputs, setCommentInputs] = useState<{ [key: string]: string }>({});
 
@@ -209,34 +212,60 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     return () => timers.forEach(clearTimeout);
   }, [commentsSig]);
 
-  const readBaseline = useRef<Record<string, { c: number; l: number }>>({});
+  // For discover unread: only count NEW character-comments on USER-authored moments.
+  const readBaseline = useRef<Record<string, { characterCommentsRead: number }>>({});
   const [readTick, setReadTick] = useState(0);
 
   useEffect(() => {
     let changed = false;
     moments.forEach(m => {
       if (!(m.id in readBaseline.current)) {
-        readBaseline.current[m.id] = {
-          c: m.comments.length,
-          l: m.likes,
-        };
+        const initialCharacterComments =
+          m.authorType === 'user'
+            ? m.comments.filter(c => c.authorType === 'character').length
+            : 0;
+        readBaseline.current[m.id] = { characterCommentsRead: initialCharacterComments };
         changed = true;
       }
     });
     if (changed) setReadTick(t => t + 1);
   }, [moments]);
 
-  const markMomentRead = (momentId: string, c: number, l: number) => {
-    readBaseline.current[momentId] = { c, l };
+  const markMomentRead = (momentId: string, currentCharacterComments: number) => {
+    readBaseline.current[momentId] = { characterCommentsRead: currentCharacterComments };
     setReadTick(x => x + 1);
   };
 
-  const momentHasUnread = (m: Moment) => {
+  const getMomentUnreadCharacterComments = (m: Moment) => {
     void readTick;
+    if (m.authorType !== 'user') return 0;
     const b = readBaseline.current[m.id];
-    if (!b) return false;
-    return m.comments.length > b.c || m.likes > b.l;
+    const now = m.comments.filter(c => c.authorType === 'character').length;
+    const read = b?.characterCommentsRead ?? 0;
+    return Math.max(0, now - read);
   };
+
+  const unreadMomentsCount = useMemo(
+    () => moments.filter(m => getMomentUnreadCharacterComments(m) > 0).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [moments, readTick]
+  );
+
+  useEffect(() => {
+    onUnreadCountChange(unreadMomentsCount);
+  }, [onUnreadCountChange, unreadMomentsCount]);
+
+  const unreadCommentsTotal = useMemo(
+    () => moments.reduce((acc, m) => acc + getMomentUnreadCharacterComments(m), 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [moments, readTick]
+  );
+
+  useEffect(() => {
+    // The BottomNav badge uses unread *moments* count (per your choice B earlier),
+    // but keep this in case we later want “comment count” without changing behavior.
+    void unreadCommentsTotal;
+  }, [unreadCommentsTotal]);
 
   const handleLike = (id: string) => {
     const wasLiked = likedMoments.has(id);
@@ -282,12 +311,14 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
         ja: newPostContent.trim(),
         en: newPostContent.trim(),
       },
+      imageUrl: newPostImageUrl ?? undefined,
       timestamp: new Date(),
       likes: engagement.likesDelta,
       comments: engagement.comments,
     };
     setMoments(prev => [newMoment, ...prev]);
     setNewPostContent('');
+    setNewPostImageUrl(null);
     setShowPostModal(false);
   };
 
@@ -362,7 +393,11 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
           const posterAvatar =
             moment.authorType === 'user' ? userProfile.avatarUrl : poster?.avatar;
           const isLiked = likedMoments.has(moment.id);
-          const unread = momentHasUnread(moment);
+          const unread = getMomentUnreadCharacterComments(moment) > 0;
+          const currentCharacterComments =
+            moment.authorType === 'user'
+              ? moment.comments.filter(c => c.authorType === 'character').length
+              : 0;
           const visibleN = commentVisible[moment.id] ?? 0;
           const shownComments = moment.comments.slice(0, visibleN);
 
@@ -379,7 +414,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
                 type="button"
                 className="w-full text-left p-4 flex items-center gap-3 hover:bg-cream-accent/5 transition-colors"
                 onClick={() =>
-                  markMomentRead(moment.id, moment.comments.length, moment.likes)
+                  markMomentRead(moment.id, currentCharacterComments)
                 }
               >
                 <img
@@ -400,7 +435,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
                 type="button"
                 className="w-full text-left px-4 pb-3 hover:bg-cream-accent/5 transition-colors"
                 onClick={() =>
-                  markMomentRead(moment.id, moment.comments.length, moment.likes)
+                  markMomentRead(moment.id, currentCharacterComments)
                 }
               >
                 <p className="text-sm leading-relaxed">{moment.content[language]}</p>
@@ -455,7 +490,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
                     setCommentInputs(prev => ({ ...prev, [moment.id]: e.target.value }))
                   }
                   onFocus={() =>
-                    markMomentRead(moment.id, moment.comments.length, moment.likes)
+                    markMomentRead(moment.id, currentCharacterComments)
                   }
                   onKeyDown={e => e.key === 'Enter' && handleCommentSubmit(moment.id)}
                   placeholder={
@@ -525,10 +560,35 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
               <div className="flex gap-4 mb-6">
                 <button
                   type="button"
-                  className="flex-1 aspect-square bg-cream-accent/10 rounded-2xl stitched-border border-dashed flex flex-col items-center justify-center gap-2 opacity-60"
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    // On mobile this often triggers camera; on desktop it's file picker.
+                    (input as any).capture = 'environment';
+                    input.onchange = (e: any) => {
+                      const file: File | undefined = e.target.files?.[0];
+                      if (!file) return;
+                      const url = URL.createObjectURL(file);
+                      setNewPostImageUrl(url);
+                    };
+                    input.click();
+                  }}
+                  className="flex-1 aspect-square bg-cream-accent/10 rounded-2xl stitched-border border-dashed flex flex-col items-center justify-center gap-2 opacity-60 hover:opacity-100 transition-opacity"
                 >
-                  <Camera className="w-6 h-6" />
-                  <span className="text-[10px] font-bold uppercase">Add Photo</span>
+                  {newPostImageUrl ? (
+                    <img
+                      src={newPostImageUrl}
+                      alt=""
+                      className="w-16 h-16 rounded-2xl object-cover border border-cream-border border-dashed"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <Camera className="w-6 h-6" />
+                  )}
+                  <span className="text-[10px] font-bold uppercase">
+                    {newPostImageUrl ? (language === 'zh' ? '已添加' : language === 'ja' ? '追加済み' : 'Added') : 'Add Photo'}
+                  </span>
                 </button>
                 <div className="flex-1" />
               </div>

@@ -6,6 +6,8 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
+<img src="assets/hero.png" alt="Fumo² Life" width="100%" />
+
 </div>
 
 ---

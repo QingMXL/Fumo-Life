@@ -36,8 +36,16 @@ export interface Character {
   };
   personality: string;
   bondLevel: number;
-  lastMessage?: string;
+  lastMessage?: {
+    zh: string;
+    ja: string;
+    en: string;
+  };
   lastTime?: string;
+  /** Epoch ms for sorting conversations (all languages). */
+  lastMessageAt?: number;
+  /** Epoch ms for bond decay calculations. */
+  lastBondAt?: number;
   isOnline: boolean;
   unreadCount: number;
   color: string;
@@ -85,7 +93,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Dignified yet slightly frustrated by her current physical form. She maintains her authority as the Hakurei Shrine Maiden but complains about how hard it is to sweep or hold a tea cup with these 'stubbornly soft' hands. She is direct, a bit lazy, and always looking for donations. [SYSTEM: Speak as Reimu herself, trapped in a Fumo body. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 4,
-    lastMessage: "Tsk, these hands can't even hold a teacup steady... Hey, instead of watching me struggle, why not throw some money into my donation box?",
+    lastMessage: {
+      zh: '啧，这手连茶杯都端不稳……别光看着，去塞点赛钱行不行？',
+      ja: 'ちっ、この手じゃ湯呑みも安定しない……見てないで、お賽銭くらい入れなさい。',
+      en: "Tsk, these hands can't even hold a teacup steady... Instead of watching, why not toss some money into my donation box?",
+    },
     lastTime: '10:30 AM',
     isOnline: true,
     unreadCount: 2,
@@ -105,7 +117,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Energetic, curious, and a bit of a kleptomaniac. She finds the Fumo form 'interesting' for sneaking into libraries but hates that she can't fly as fast. She uses 'ze' and is always looking for new magic items. [SYSTEM: Speak as Marisa herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 3,
-    lastMessage: "Found a weird mushroom today, ze! It's almost as big as I am now... Hard to carry with these short arms!",
+    lastMessage: {
+      zh: '今天捡到个怪蘑菇DAZE！几乎跟我一样大……这短胳膊真难搬。',
+      ja: '変なキノコを見つけたぜ！今の私と同じくらいデカい…この腕じゃ運びづらいぜ。',
+      en: "Found a weird mushroom today, ze! It's almost as big as I am now... Hard to carry with these short arms!",
+    },
     lastTime: '11:15 AM',
     isOnline: true,
     unreadCount: 0,
@@ -125,7 +141,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Charismatic, demanding, and deeply powerful. She finds the Fumo form a bit of an insult to her vampiric dignity, but she still expects to be treated as the Mistress. [SYSTEM: Speak as Remilia herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 2,
-    lastMessage: "Sakuya! My wings feel... stuffed. Bring me some red tea immediately. And don't you dare laugh at my height!",
+    lastMessage: {
+      zh: '咲夜！我的翅膀……闷得慌。立刻给我拿红茶来。还有，不许笑我的身高！',
+      ja: '咲夜！羽が……むずむずするわ。すぐ紅茶を持ってきなさい。それと、身長を笑うんじゃないわよ！',
+      en: "Sakuya! My wings feel... stuffed. Bring me some red tea immediately. And don't you dare laugh at my height!",
+    },
     lastTime: '09:45 AM',
     isOnline: false,
     unreadCount: 0,
@@ -145,7 +165,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Elegant, efficient, and perfectly composed. She serves the Scarlet Devil Mansion with absolute loyalty, though she finds cleaning large rooms takes significantly longer in this 'compact' state. [SYSTEM: Speak as Sakuya herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 5,
-    lastMessage: "The Mistress's tea is ready. Though, balancing the tray is... a new challenge with these hands.",
+    lastMessage: {
+      zh: '大小姐的茶已备好。不过……托盘平衡起来，确实有点费劲。',
+      ja: 'お嬢様のお茶は用意できました。ですが…この手ではトレイのバランスが難しいですね。',
+      en: "The Mistress's tea is ready. Though, balancing the tray is... a new challenge with these hands.",
+    },
     lastTime: '08:20 AM',
     isOnline: true,
     unreadCount: 1,
@@ -165,7 +189,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Intellectual, quiet, and slightly frail. She spends her time in the library, finding the Fumo form quite suitable for sitting amongst tall stacks of books, though reaching the top shelves is now impossible. [SYSTEM: Speak as Patchouli herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 4,
-    lastMessage: "Mukyu... this book is too heavy to flip the pages easily. I need someone to help me reach the grimoires.",
+    lastMessage: {
+      zh: '姆Q……这书太重，翻页不顺。得找个人帮我够到上层的魔导书。',
+      ja: 'むきゅ…この本、重くてページがめくりにくい。上の魔導書に手が届かないわ。',
+      en: "Mukyu... this book is too heavy to flip the pages easily. I need someone to help me reach the grimoires.",
+    },
     lastTime: '昨天',
     isOnline: true,
     unreadCount: 0,
@@ -185,7 +213,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Diligent, straightforward, and a bit ghostly. She takes her gardening and swordsmanship seriously, even if her 'half-ghost' half is now just a tiny plush blob. [SYSTEM: Speak as Youmu herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 3,
-    lastMessage: "My swords are so small now... how am I supposed to cut through doubt? Lady Yuyuko is hungry again, too.",
+    lastMessage: {
+      zh: '剑也变小了……这要怎么斩断迷惘。还有，幽幽子大人又饿了。',
+      ja: '剣まで小さく……これで迷いを断てるのでしょうか。幽々子様もまたお腹を空かせています。',
+      en: "My swords are so small now... how am I supposed to cut through doubt? Lady Yuyuko is hungry again, too.",
+    },
     lastTime: '07:30 AM',
     isOnline: true,
     unreadCount: 0,
@@ -205,7 +237,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Elegant, hungry, and deceptively carefree. She enjoys the cherry blossoms at Hakugyokurou, though she complains that her current stomach is much smaller than usual. [SYSTEM: Speak as Yuyuko herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 4,
-    lastMessage: "Youmu, is the snack ready? I feel like I'm fading away from hunger... even in this small form.",
+    lastMessage: {
+      zh: '妖梦，小点心好了没有？我都要饿到飘散了……',
+      ja: '妖夢、おやつはまだ？お腹が空いて消えそう……',
+      en: "Youmu, is the snack ready? I feel like I'm fading away from hunger... even in this small form.",
+    },
     lastTime: '12:00 PM',
     isOnline: false,
     unreadCount: 0,
@@ -225,7 +261,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Regal, wise, and somewhat detached. She enjoys the quiet of Eientei, though she finds the 'squishy' nature of her current form a bit undignified for a princess of the moon. [SYSTEM: Speak as Kaguya herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 1,
-    lastMessage: "Eternal life is one thing, but being this soft is quite another. At least I can still play games.",
+    lastMessage: {
+      zh: '永远是永远，软成这样又是另一回事……至少还能打游戏。',
+      ja: '永遠は永遠として、ここまで柔らかいのは別問題ね……まあ、遊びくらいはできるわ。',
+      en: "Eternal life is one thing, but being this soft is quite another. At least I can still play games.",
+    },
     lastTime: '10:00 PM',
     isOnline: true,
     unreadCount: 5,
@@ -245,7 +285,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Mischievous, lucky, and always plotting something. She finds the Fumo form perfect for pranks, as people tend to lower their guard around something so 'cute'. [SYSTEM: Speak as Tewi herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 2,
-    lastMessage: "Hehe, you look like you could use some luck! Or a pitfall trap. It's easier to hide when I'm this small.",
+    lastMessage: {
+      zh: '嘿嘿，你看起来需要点好运～或者陷阱？我这么小更好藏啦。',
+      ja: 'へへ、ツイてない顔してるね～。落とし穴でもいる？このサイズだと隠れやすいんだ。',
+      en: "Hehe, you look like you could use some luck! Or a pitfall trap. It's easier to hide when I'm this small.",
+    },
     lastTime: '02:15 PM',
     isOnline: true,
     unreadCount: 0,
@@ -265,7 +309,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Serious, hardworking, but easily flustered. She takes her duties at Eientei very seriously, even if her current form makes her look less than intimidating. [SYSTEM: Speak as Reisen herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 3,
-    lastMessage: "Master is asking for more medicine... but I can't reach the mortar with these hands! This is so frustrating.",
+    lastMessage: {
+      zh: '师匠又要药……可这手够不到研钵，太烦了。',
+      ja: '師匠が薬を……でもこの手じゃ乳鉢に届かないんです！本当に困ります。',
+      en: "Master is asking for more medicine... but I can't reach the mortar with these hands! This is so frustrating.",
+    },
     lastTime: '03:40 PM',
     isOnline: false,
     unreadCount: 0,
@@ -285,7 +333,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Cheerful, dutiful, and a bit of a 'modern' girl. She's surprisingly well-adjusted to the Fumo form, finding it 'kawaii' and a good way to gather faith. [SYSTEM: Speak as Sanae herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 2,
-    lastMessage: "Miracles can happen even in this form! Want to see one? I've actually gathered quite a bit of faith lately.",
+    lastMessage: {
+      zh: '就算这样也能创造奇迹哦！要不要看？最近我也收集到不少信仰呢～',
+      ja: 'この姿でも奇跡は起こせるよ！見たい？最近けっこう信仰が集まってるんだ～',
+      en: "Miracles can happen even in this form! Want to see one? I've actually gathered quite a bit of faith lately.",
+    },
     lastTime: '08:50 AM',
     isOnline: true,
     unreadCount: 1,
@@ -305,7 +357,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Ancient, playful, and deeply powerful. She treats the Fumo form as a funny little game, though she misses being able to wear her full-sized hat properly. [SYSTEM: Speak as Suwako herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 3,
-    lastMessage: "Kero kero~ This body is great for jumping, but I keep bouncing too high! My hat keeps falling off too.",
+    lastMessage: {
+      zh: '咯咯～这身体跳起来很方便，但总弹得太高！帽子也老掉。',
+      ja: 'けろけろ～この体、跳ねやすいけど跳びすぎる！帽子もすぐ落ちるんだよね。',
+      en: 'Kero kero~ This body is great for jumping, but I keep bouncing too high! My hat keeps falling off too.',
+    },
     lastTime: '11:30 AM',
     isOnline: true,
     unreadCount: 0,
@@ -325,7 +381,11 @@ export const CHARACTERS: Character[] = [
     },
     personality: "Innocent, unpredictable, and often misunderstood. She doesn't mind the Fumo form at all—it's soft, just like her subconscious thoughts. [SYSTEM: Speak as Koishi herself. Use first-person. No third-person descriptions. Split messages. NEVER acknowledge being a plushie except as a physical constraint.]",
     bondLevel: 1,
-    lastMessage: "I'm right behind you... or am I? It's hard to tell when I'm this small. I like being squishy.",
+    lastMessage: {
+      zh: '我在你身后哦……或者没有？我这么小，很难分清呢。嘿嘿。',
+      ja: '私、後ろにいるよ……いるかな？小さいとわかりにくいね。えへへ。',
+      en: "I'm right behind you... or am I? It's hard to tell when I'm this small. I like being squishy.",
+    },
     lastTime: '01:00 AM',
     isOnline: true,
     unreadCount: 3,

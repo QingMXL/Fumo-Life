@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { type Language, type Character } from '@/types';
 import { Heart, BookOpen, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -21,10 +21,15 @@ function getAffiliationLabel(affiliation: string, language: Language): string {
 interface ContactsPageProps {
   language: Language;
   characters: Character[];
+  onEnterRefreshOnline: () => void;
 }
 
-export const ContactsPage: React.FC<ContactsPageProps> = ({ language, characters }) => {
+export const ContactsPage: React.FC<ContactsPageProps> = ({ language, characters, onEnterRefreshOnline }) => {
   const affiliations = Array.from(new Set(characters.map(c => c.affiliation || 'Other')));
+
+  useEffect(() => {
+    onEnterRefreshOnline();
+  }, [onEnterRefreshOnline]);
 
   return (
     <div className="pb-24 pt-4 px-4 max-w-md mx-auto">

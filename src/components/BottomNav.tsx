@@ -12,9 +12,11 @@ const tabs = [
 
 interface BottomNavProps {
   language: 'zh' | 'ja' | 'en';
+  unreadMessagesCount: number;
+  unreadDiscoverCount: number;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ language }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ language, unreadMessagesCount, unreadDiscoverCount }) => {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-cream-card border-t-2 border-cream-border border-dashed px-4 pb-6 pt-2 flex justify-around items-center z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
       {tabs.map((tab) => (
@@ -26,7 +28,19 @@ export const BottomNav: React.FC<BottomNavProps> = ({ language }) => {
             isActive ? "bg-cream-accent/30 scale-110" : "opacity-60 grayscale"
           )}
         >
-          <tab.icon className="w-6 h-6 text-cream-text" />
+          <div className="relative">
+            <tab.icon className="w-6 h-6 text-cream-text" />
+            {tab.id === 'messages' && unreadMessagesCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-[#FF4D4D] text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white fumo-shadow">
+                {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
+              </span>
+            )}
+            {tab.id === 'discover' && unreadDiscoverCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-[#FF4D4D] text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white fumo-shadow">
+                {unreadDiscoverCount > 99 ? '99+' : unreadDiscoverCount}
+              </span>
+            )}
+          </div>
           <span className="text-[10px] font-bold uppercase tracking-wider">
             {tab.label[language]}
           </span>

@@ -12,9 +12,14 @@ interface MessagesPageProps {
 export const MessagesPage: React.FC<MessagesPageProps> = ({ language, characters }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredCharacters = characters.filter(fumo => 
-    fumo.name[language].toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredCharacters = characters
+    .filter(fumo => fumo.name[language].toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => {
+      const au = a.unreadCount > 0 ? 1 : 0;
+      const bu = b.unreadCount > 0 ? 1 : 0;
+      if (bu !== au) return bu - au;
+      return (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0);
+    });
 
   return (
     <div className="pb-24 pt-4 px-4 max-w-md mx-auto">
@@ -60,7 +65,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ language, characters
                 </div>
                 <div className="flex justify-between items-center">
                   <p className="text-sm opacity-60 truncate">
-                    {fumo.lastMessage}
+                    {fumo.lastMessage?.[language] ?? ''}
                   </p>
                   {fumo.unreadCount > 0 && (
                     <div className="ml-2 bg-[#FF4D4D] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center fumo-shadow">
