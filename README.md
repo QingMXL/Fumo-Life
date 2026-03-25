@@ -4,15 +4,9 @@
 
 *Cross the barrier — soft company from Gensokyo in Fumo form* · フモフモ幻想郷
 
-<div style="display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:8px; width:100%; max-width:44rem; margin:0 auto;">
-  <div style="text-align:left; justify-self:start;">
-    <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
-  </div>
-  <div style="text-align:center; max-width:100%; word-break:break-all;">
-    <strong>Live demo:</strong> <a href="https://www.fumofumo.life/">https://www.fumofumo.life/</a>
-  </div>
-  <div aria-hidden="true"></div>
-</div>
+**English** · [简体中文](README.zh-CN.md)
+
+**Live demo:** [fumofumo.life](https://www.fumofumo.life/)
 
 <img src="assets/hero.png" alt="Fumo² Life" width="100%" />
 
@@ -106,5 +100,3 @@ When adding a **new Fumo**, follow the Fumo form spec in the PRD. Strong image p
 ### License
 
 MIT License
-
-<p align="center"><a href="README.zh-CN.md">简体中文</a></p>

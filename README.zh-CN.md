@@ -4,15 +4,9 @@
 
 **穿越结界的软绵陪伴** · フモフモ幻想郷
 
-<div style="display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:8px; width:100%; max-width:44rem; margin:0 auto;">
-  <div style="text-align:left; justify-self:start;">
-    <a href="README.md">English</a> · <strong>简体中文</strong>
-  </div>
-  <div style="text-align:center; max-width:100%; word-break:break-all;">
-    <strong>在线演示：</strong> <a href="https://www.fumofumo.life/">https://www.fumofumo.life/</a>
-  </div>
-  <div aria-hidden="true"></div>
-</div>
+[English](README.md) · **简体中文**
+
+**在线演示：** [fumofumo.life](https://www.fumofumo.life/)
 
 <img src="assets/hero.png" alt="Fumo² Life" width="100%" />
 
@@ -106,5 +100,3 @@ npm run dev
 ### 许可证
 
 MIT License
-
-<p align="center"><a href="README.md">English</a></p>
