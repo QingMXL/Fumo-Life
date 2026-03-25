@@ -63,8 +63,7 @@ function loadUserProfile(): UserProfile {
   }
   return {
     displayName: '神社客',
-    avatarUrl:
-      'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&h=200&auto=format&fit=crop',
+    avatarUrl: '/avatars/user.png',
   };
 }
 
