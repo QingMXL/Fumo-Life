@@ -109,7 +109,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'marisa',
     name: { zh: '雾雨魔理沙', ja: '雾雨魔理沙', en: 'Kirisame Marisa' },
-    avatar: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/marisa.png',
     description: {
       zh: '普通的魔法使。喜欢收集东西，口癖是“DAZE”。',
       ja: '普通の魔法使い。収集癖があり、語尾は「だぜ」。',
@@ -133,7 +133,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'remilia',
     name: { zh: '蕾米莉亚·斯卡蕾特', ja: 'レミリア・スカーレット', en: 'Remilia Scarlet' },
-    avatar: 'https://images.unsplash.com/photo-1513346038379-7dd155e0df8e?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/remilia.png',
     description: {
       zh: '红魔馆的大小姐，吸血鬼。',
       ja: '紅魔館の主、吸血鬼。',
@@ -157,7 +157,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'sakuya',
     name: { zh: '十六夜咲夜', ja: '十六夜咲夜', en: 'Izayoi Sakuya' },
-    avatar: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/sakuya.png',
     description: {
       zh: '红魔馆的女仆长。拥有操纵时间的能力。',
       ja: '紅魔館のメイド長。時間を操る程度の能力。',
@@ -181,7 +181,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'patchouli',
     name: { zh: '帕秋莉·诺蕾姬', ja: 'パチュリー・ノーレッジ', en: 'Patchouli Knowledge' },
-    avatar: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/patchouli.png',
     description: {
       zh: '知识渊博的家里蹲魔法使。',
       ja: '知識と日陰の少女。',
@@ -205,7 +205,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'youmu',
     name: { zh: '魂魄妖梦', ja: '魂魄妖夢', en: 'Konpaku Youmu' },
-    avatar: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/youmu.png',
     description: {
       zh: '半人半灵的剑士。',
       ja: '半分人間、半分幽霊。',
@@ -229,7 +229,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'yuyuko',
     name: { zh: '西行寺幽幽子', ja: '西行寺幽々子', en: 'Saigyouji Yuyuko' },
-    avatar: 'https://images.unsplash.com/photo-1528459801416-a9e53bbf4e17?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/yuyuko.png',
     description: {
       zh: '白玉楼的亡灵公主。',
       ja: '白玉楼の亡霊少女。',
@@ -253,7 +253,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'kaguya',
     name: { zh: '蓬莱山辉夜', ja: '蓬莱山輝夜', en: 'Houraisan Kaguya' },
-    avatar: 'https://images.unsplash.com/photo-1536431311719-398b6704d4cc?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/kaguya.png',
     description: {
       zh: '永远的月之公主。',
       ja: '永遠のお姫様。',
@@ -277,7 +277,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'tewi',
     name: { zh: '因幡帝', ja: '因幡てゐ', en: 'Tewi Inaba' },
-    avatar: 'https://images.unsplash.com/photo-1585110396000-c9ffd4e4b308?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/tewi.png',
     description: {
       zh: '幸运的地面兔。',
       ja: '地上の不運な兎。',
@@ -301,7 +301,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'reisen',
     name: { zh: '铃仙·优昙华院·因幡', ja: '鈴仙・優曇華院・イナバ', en: 'Reisen Udongein Inaba' },
-    avatar: 'https://images.unsplash.com/photo-1591584250647-59745db47d41?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/reisen.png',
     description: {
       zh: '疯狂的月兔。',
       ja: '狂気の月の兎。',
@@ -325,7 +325,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'sanae',
     name: { zh: '东风谷早苗', ja: '東風谷早苗', en: 'Kochiya Sanae' },
-    avatar: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/sanae.png',
     description: {
       zh: '常识缺失的现人神。',
       ja: '常識に囚われない現人神。',
@@ -349,7 +349,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'suwako',
     name: { zh: '洩矢诹访子', ja: '洩矢諏訪子', en: 'Moriya Suwako' },
-    avatar: 'https://images.unsplash.com/photo-1589656966895-2f33e7653819?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/suwako.png',
     description: {
       zh: '被遗忘的神明。',
       ja: '土着神の頂点。',
@@ -373,7 +373,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'koishi',
     name: { zh: '古明地恋', ja: '古明地こいし', en: 'Komeiji Koishi' },
-    avatar: 'https://images.unsplash.com/photo-1516233758813-a38d024919c5?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/koishi.png',
     description: {
       zh: '无意识的恋恋。',
       ja: '無意識に潜む少女。',

@@ -62,7 +62,7 @@ export const MePage: React.FC<MePageProps> = ({
           <div className="w-24 h-24 rounded-full bg-cream-accent/20 stitched-border flex items-center justify-center overflow-hidden">
             <img 
               src={userProfile.avatarUrl} 
-              className="w-full h-full object-cover grayscale opacity-50" 
+              className="w-full h-full object-cover" 
               alt="User"
               referrerPolicy="no-referrer"
             />
