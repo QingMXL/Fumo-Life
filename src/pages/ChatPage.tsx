@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Camera, Gift, MapPin, Send, Smile, Sparkles, Heart } from 'lucide-react';
+import { ChevronLeft, Camera, Gift, MapPin, Send, Smile, Heart } from 'lucide-react';
 import { type Language, type Message, type Character } from '@/types';
 import { generateFumoResponse } from '@/services/gemini';
 import { cn } from '@/lib/utils';
@@ -9,26 +9,124 @@ import { GoogleGenAI } from "@google/genai";
 
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
+const CHAT_STORAGE_PREFIX = 'fumo-chat-';
+
+function loadStoredChat(characterId: string): Message[] | null {
+  try {
+    const raw = localStorage.getItem(CHAT_STORAGE_PREFIX + characterId);
+    if (!raw) return null;
+    const arr = JSON.parse(raw) as Array<Omit<Message, 'timestamp'> & { timestamp: string }>;
+    return arr.map(m => ({ ...m, timestamp: new Date(m.timestamp) }));
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredChat(characterId: string, msgs: Message[]) {
+  localStorage.setItem(
+    CHAT_STORAGE_PREFIX + characterId,
+    JSON.stringify(msgs.map(m => ({ ...m, timestamp: m.timestamp.toISOString() })))
+  );
+}
+
+/** Staggered unread bubbles when opening a thread with no local history. */
+function buildUnreadSeed(fumo: Character, lang: Language): Message[] {
+  const n = Math.min(Math.max(fumo.unreadCount, 0), 5);
+  if (n === 0) return [];
+  const filler =
+    lang === 'zh'
+      ? '……刚才想找你，你不在呢。'
+      : lang === 'ja'
+        ? '……さっき声をかけたのに、いなかったわ。'
+        : '...Looked for you earlier—you weren’t around.';
+  const out: Message[] = [];
+  for (let i = 0; i < n; i++) {
+    const last = i === n - 1;
+    out.push({
+      id: `unread-${fumo.id}-${i}`,
+      characterId: fumo.id,
+      sender: 'fumo',
+      text: last ? (fumo.lastMessage ?? filler) : filler,
+      timestamp: new Date(Date.now() - (n - 1 - i) * 70_000),
+    });
+  }
+  return out;
+}
+
 interface ChatPageProps {
   language: Language;
   characters: Character[];
   onUpdateBond: (id: string, amount: number) => void;
+  onMarkChatRead: (id: string) => void;
 }
 
-export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpdateBond }) => {
+export const ChatPage: React.FC<ChatPageProps> = ({
+  language,
+  characters,
+  onUpdateBond,
+  onMarkChatRead,
+}) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const fumo = characters.find(c => c.id === id);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [revealCount, setRevealCount] = useState(0);
+  const initialAnimCompleteRef = useRef(true);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const visibleMessages = messages.slice(0, revealCount);
+
+  const syncRevealForAppend = (nextLen: number) => {
+    queueMicrotask(() => {
+      if (initialAnimCompleteRef.current) setRevealCount(nextLen);
+    });
+  };
+
+  useEffect(() => {
+    if (!fumo) return;
+    onMarkChatRead(fumo.id);
+    initialAnimCompleteRef.current = false;
+
+    const stored = loadStoredChat(fumo.id);
+    if (stored && stored.length > 0) {
+      setMessages(stored);
+      setRevealCount(stored.length);
+      initialAnimCompleteRef.current = true;
+      return;
+    }
+
+    const seeds = buildUnreadSeed(fumo, language);
+    setMessages(seeds);
+    setRevealCount(0);
+    if (seeds.length === 0) {
+      initialAnimCompleteRef.current = true;
+      return;
+    }
+
+    let n = 0;
+    const interval = window.setInterval(() => {
+      n += 1;
+      setRevealCount(Math.min(n, seeds.length));
+      if (n >= seeds.length) {
+        window.clearInterval(interval);
+        initialAnimCompleteRef.current = true;
+      }
+    }, 520);
+    return () => window.clearInterval(interval);
+  }, [fumo?.id, onMarkChatRead]);
+
+  useEffect(() => {
+    if (!fumo?.id || messages.length === 0) return;
+    saveStoredChat(fumo.id, messages);
+  }, [messages, fumo?.id]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isTyping]);
+  }, [visibleMessages, isTyping, revealCount]);
 
   const [showGifts, setShowGifts] = useState(false);
   const [showExplore, setShowExplore] = useState(false);
@@ -52,7 +150,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpda
     { id: 'mushroom', name: { zh: '蘑菇', ja: 'キノコ', en: 'Mushroom' }, icon: '🍄' },
   ];
 
-  const handleGift = (gift: any) => {
+  const handleGift = (gift: { id: string; name: Record<Language, string>; icon: string }) => {
     if (!fumo) return;
     const giftMsg: Message = {
       id: Date.now().toString(),
@@ -61,7 +159,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpda
       text: `${language === 'zh' ? '送出了' : language === 'ja' ? 'を贈りました' : 'Gave'} ${gift.icon} ${gift.name[language]}`,
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, giftMsg]);
+    const historyAfterGift = [...messages, giftMsg];
+    setMessages(prev => {
+      const next = [...prev, giftMsg];
+      syncRevealForAppend(next.length);
+      return next;
+    });
     setShowGifts(false);
     
     // Update bond level
@@ -70,14 +173,19 @@ export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpda
     // Simulate AI reaction
     setTimeout(async () => {
       setIsTyping(true);
-      const reaction = await generateFumoResponse(fumo.id, [...messages, giftMsg], `I gave you ${gift.name.en}.`, language);
-      setMessages(prev => [...prev, {
+      const reaction = await generateFumoResponse(fumo.id, historyAfterGift, `I gave you ${gift.name.en}.`, language);
+      const reply: Message = {
         id: (Date.now() + 1).toString(),
         characterId: fumo.id,
         sender: 'fumo',
         text: reaction,
         timestamp: new Date(),
-      }]);
+      };
+      setMessages(prev => {
+        const next = [...prev, reply];
+        syncRevealForAppend(next.length);
+        return next;
+      });
       setIsTyping(false);
     }, 1000);
   };
@@ -93,6 +201,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpda
 
   if (!fumo) return <div>Fumo not found</div>;
 
+  const liveFumo = characters.find(c => c.id === fumo.id) ?? fumo;
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
@@ -104,12 +214,17 @@ export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpda
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    const historyWithUser = [...messages, userMsg];
+    setMessages(prev => {
+      const next = [...prev, userMsg];
+      syncRevealForAppend(next.length);
+      return next;
+    });
     setInput('');
     setIsTyping(true);
 
     try {
-      const responseText = await generateFumoResponse(fumo.id, messages, input, language);
+      const responseText = await generateFumoResponse(fumo.id, historyWithUser, input, language);
       
       // Split response by "---" to simulate multiple messages
       const parts = responseText.split('---').map(p => p.trim()).filter(p => p.length > 0);
@@ -125,7 +240,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpda
           text: parts[i],
           timestamp: new Date(),
         };
-        setMessages(prev => [...prev, fumoMsg]);
+        setMessages(prev => {
+          const next = [...prev, fumoMsg];
+          syncRevealForAppend(next.length);
+          return next;
+        });
       }
     } catch (error) {
       console.error(error);
@@ -165,7 +284,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpda
           timestamp: new Date(),
           imageUrl,
         };
-        setMessages(prev => [...prev, fumoMsg]);
+        setMessages(prev => {
+          const next = [...prev, fumoMsg];
+          syncRevealForAppend(next.length);
+          return next;
+        });
       }
     } catch (error) {
       console.error("Image generation failed:", error);
@@ -232,13 +355,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpda
                 <div className="w-full bg-cream-accent/20 h-4 rounded-full overflow-hidden stitched-border border-dashed">
                   <div 
                     className="h-full bg-cream-text transition-all duration-1000" 
-                    style={{ width: `${(fumo.bondLevel / 10) * 100}%` }}
+                    style={{ width: `${(liveFumo.bondLevel / 10) * 100}%` }}
                   />
                 </div>
-                <span className="text-xs font-black">BOND LEVEL: {fumo.bondLevel} / 10</span>
+                <span className="text-xs font-black">BOND LEVEL: {liveFumo.bondLevel} / 10</span>
                 
                 <div className="w-full flex flex-col gap-2 mt-2">
                   <button 
+                    type="button"
                     onClick={() => {
                       onUpdateBond(fumo.id, 1);
                       setShowExplore(false);
@@ -249,6 +373,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpda
                     {language === 'zh' ? '摸摸头' : language === 'ja' ? 'なでなで' : 'Pat Head'}
                   </button>
                   <button 
+                    type="button"
                     onClick={() => setShowExplore(false)}
                     className="w-full py-2 rounded-full font-bold opacity-40 hover:opacity-100 transition-opacity text-xs"
                   >
@@ -272,7 +397,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpda
             <h2 className="font-bold leading-tight">{fumo.name[language]}</h2>
             <div className="flex items-center gap-1">
               <span className="w-2 h-2 bg-green-400 rounded-full" />
-              <span className="text-[10px] opacity-60 font-bold">Bond Level: {fumo.bondLevel} / 10</span>
+              <span className="text-[10px] opacity-60 font-bold">Bond Level: {liveFumo.bondLevel} / 10</span>
             </div>
           </div>
         </div>
@@ -281,7 +406,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ language, characters, onUpda
       {/* Chat Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
         <AnimatePresence initial={false}>
-          {messages.map((msg) => (
+          {visibleMessages.map((msg) => (
             <motion.div
               key={msg.id}
               initial={{ opacity: 0, y: 10, scale: 0.95 }}

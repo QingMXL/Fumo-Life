@@ -3,6 +3,21 @@ import { type Language, type Character } from '@/types';
 import { Heart, BookOpen, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+const AFFILIATION_I18N: Record<string, { zh: string; ja: string; en: string }> = {
+  'Hakurei Shrine': { zh: '博丽神社', ja: '博麗神社', en: 'Hakurei Shrine' },
+  'Forest of Magic': { zh: '魔法之森', ja: '魔法の森', en: 'Forest of Magic' },
+  'Scarlet Devil Mansion': { zh: '红魔馆', ja: '紅魔館', en: 'Scarlet Devil Mansion' },
+  Hakugyokurou: { zh: '白玉楼', ja: '白玉楼', en: 'Hakugyokurou' },
+  Eientei: { zh: '永远亭', ja: '永遠亭', en: 'Eientei' },
+  'Moriya Shrine': { zh: '守矢神社', ja: '守矢神社', en: 'Moriya Shrine' },
+  Chireiden: { zh: '地灵殿', ja: '地霊殿', en: 'Chireiden' },
+  Other: { zh: '其他', ja: 'その他', en: 'Other' },
+};
+
+function getAffiliationLabel(affiliation: string, language: Language): string {
+  return AFFILIATION_I18N[affiliation]?.[language] ?? affiliation;
+}
+
 interface ContactsPageProps {
   language: Language;
   characters: Character[];
@@ -25,7 +40,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ language, characters
           <section key={affiliation}>
             <h2 className="text-xs font-black opacity-30 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
               <Star className="w-3 h-3" />
-              {affiliation}
+              {getAffiliationLabel(affiliation, language)}
             </h2>
             <div className="grid grid-cols-1 gap-4">
               {characters.filter(c => (c.affiliation || 'Other') === affiliation).map(fumo => (
@@ -47,7 +62,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ language, characters
                       </div>
                       <div className="flex items-center gap-1 text-[10px] font-bold opacity-60">
                         <BookOpen className="w-3 h-3" />
-                        {fumo.photoCount || 0} Photos
+                        {fumo.photoCount || 0} {language === 'zh' ? '照片' : language === 'ja' ? '写真' : 'Photos'}
                       </div>
                     </div>
                   </div>

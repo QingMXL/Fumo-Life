@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { type Language, type Character } from '@/types';
 import { Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
+import { motion } from 'motion/react';
 
 interface MessagesPageProps {
   language: Language;
@@ -32,9 +33,14 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ language, characters
       </header>
 
       <div className="space-y-4">
-        {filteredCharacters.map((fumo) => (
-          <Link
+        {filteredCharacters.map((fumo, index) => (
+          <motion.div
             key={fumo.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.075, duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+          >
+          <Link
             to={`/chat/${fumo.id}`}
             className="block stitched-card hover:translate-y-[-2px] transition-transform active:scale-95"
           >
@@ -65,6 +71,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ language, characters
               </div>
             </div>
           </Link>
+          </motion.div>
         ))}
       </div>
     </div>

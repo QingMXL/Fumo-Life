@@ -1,5 +1,26 @@
 export type Language = 'zh' | 'ja' | 'en';
 
+/** Logged-in “饲养员” profile shared across Me / Discover. */
+export interface UserProfile {
+  displayName: string;
+  avatarUrl: string;
+}
+
+export interface MomentComment {
+  id: string;
+  authorType: 'user' | 'character';
+  /** When authorType === 'character' */
+  characterId?: string;
+  /** Snapshot when a user comments (display name may differ per language later) */
+  userDisplayName?: string;
+  userAvatarUrl?: string;
+  text: {
+    zh: string;
+    ja: string;
+    en: string;
+  };
+}
+
 export interface Character {
   id: string;
   name: {
@@ -36,23 +57,20 @@ export interface Message {
 
 export interface Moment {
   id: string;
-  characterId: string;
+  /** User-authored timeline post vs in-world Fumo character post */
+  authorType: 'user' | 'character';
+  /** Set when authorType === 'character' */
+  characterId?: string;
   content: {
     zh: string;
     ja: string;
     en: string;
   };
-  imageUrl: string;
+  /** Optional: omit for text-only moments */
+  imageUrl?: string;
   timestamp: Date;
   likes: number;
-  comments: {
-    characterId: string;
-    text: {
-      zh: string;
-      ja: string;
-      en: string;
-    };
-  }[];
+  comments: MomentComment[];
 }
 
 export const CHARACTERS: Character[] = [

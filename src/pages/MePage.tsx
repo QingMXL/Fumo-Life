@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { type Language, type Character } from '@/types';
+import React, { useState, useEffect } from 'react';
+import { type Language, type Character, type UserProfile } from '@/types';
 import { Settings, Camera, Heart, Globe, Bell, Shield, X, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -7,11 +7,19 @@ interface MePageProps {
   language: Language;
   setLanguage: (lang: Language) => void;
   characters: Character[];
+  userProfile: UserProfile;
+  onUserProfileChange: (p: UserProfile) => void;
 }
 
-export const MePage: React.FC<MePageProps> = ({ language, setLanguage, characters }) => {
+export const MePage: React.FC<MePageProps> = ({
+  language,
+  setLanguage,
+  characters,
+  userProfile,
+  onUserProfileChange,
+}) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState('饲养员 #89757');
+  const [name, setName] = useState(userProfile.displayName);
   const [showLanguage, setShowLanguage] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -26,9 +34,12 @@ export const MePage: React.FC<MePageProps> = ({ language, setLanguage, character
     'https://images.unsplash.com/photo-1589656966895-2f33e7653819?q=80&w=400',
   ];
 
-  const [avatar, setAvatar] = useState('https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&h=200&auto=format&fit=crop');
   const [notifMessages, setNotifMessages] = useState(true);
   const [notifMoments, setNotifMoments] = useState(true);
+
+  useEffect(() => {
+    setName(userProfile.displayName);
+  }, [userProfile.displayName]);
 
   const handleAvatarChange = () => {
     const input = document.createElement('input');
@@ -38,7 +49,7 @@ export const MePage: React.FC<MePageProps> = ({ language, setLanguage, character
       const file = e.target.files[0];
       if (file) {
         const url = URL.createObjectURL(file);
-        setAvatar(url);
+        onUserProfileChange({ ...userProfile, avatarUrl: url });
       }
     };
     input.click();
@@ -50,7 +61,7 @@ export const MePage: React.FC<MePageProps> = ({ language, setLanguage, character
         <div className="relative mb-4">
           <div className="w-24 h-24 rounded-full bg-cream-accent/20 stitched-border flex items-center justify-center overflow-hidden">
             <img 
-              src={avatar} 
+              src={userProfile.avatarUrl} 
               className="w-full h-full object-cover grayscale opacity-50" 
               alt="User"
               referrerPolicy="no-referrer"
@@ -71,14 +82,25 @@ export const MePage: React.FC<MePageProps> = ({ language, setLanguage, character
               onChange={e => setName(e.target.value)}
               className="bg-white stitched-border rounded-full px-4 py-1 text-sm font-bold focus:outline-none"
               autoFocus
-              onBlur={() => setIsEditing(false)}
-              onKeyDown={e => e.key === 'Enter' && setIsEditing(false)}
+              onBlur={() => {
+                onUserProfileChange({ ...userProfile, displayName: name.trim() || userProfile.displayName });
+                setIsEditing(false);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  onUserProfileChange({ ...userProfile, displayName: name.trim() || userProfile.displayName });
+                  setIsEditing(false);
+                }
+              }}
             />
           ) : (
-            <h2 className="text-xl font-black text-cream-text">{name}</h2>
+            <h2 className="text-xl font-black text-cream-text">{userProfile.displayName}</h2>
           )}
           <button 
-            onClick={() => setIsEditing(!isEditing)}
+            onClick={() => {
+              if (!isEditing) setName(userProfile.displayName);
+              setIsEditing(!isEditing);
+            }}
             className="p-1 opacity-40 hover:opacity-100 transition-opacity"
           >
             <Settings className="w-4 h-4" />
