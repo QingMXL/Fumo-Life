@@ -12,12 +12,14 @@ import { pickIncomingPing } from './data/inboxNpcPings';
 const USER_PROFILE_KEY = 'fumo-life-user-profile';
 const DISCOVER_UNREAD_KEY = 'fumo-discover-unread-count';
 const CHAT_STORAGE_PREFIX = 'fumo-chat-';
+const CHAT_PERSISTENCE_ENABLED = false;
 
 function chatStorageKey(characterId: string, language: Language) {
   return `${CHAT_STORAGE_PREFIX}${characterId}:${language}`;
 }
 
 function loadStoredChat(characterId: string, language: Language): Message[] | null {
+  if (!CHAT_PERSISTENCE_ENABLED) return null;
   try {
     const raw = localStorage.getItem(chatStorageKey(characterId, language));
     if (!raw) return null;
@@ -29,6 +31,7 @@ function loadStoredChat(characterId: string, language: Language): Message[] | nu
 }
 
 function saveStoredChat(characterId: string, language: Language, msgs: Message[]) {
+  if (!CHAT_PERSISTENCE_ENABLED) return;
   localStorage.setItem(
     chatStorageKey(characterId, language),
     JSON.stringify(msgs.map(m => ({ ...m, timestamp: m.timestamp.toISOString() })))

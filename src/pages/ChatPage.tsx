@@ -10,12 +10,14 @@ import { GoogleGenAI } from "@google/genai";
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 const CHAT_STORAGE_PREFIX = 'fumo-chat-';
+const CHAT_PERSISTENCE_ENABLED = false;
 
 function chatStorageKey(characterId: string, language: Language) {
   return `${CHAT_STORAGE_PREFIX}${characterId}:${language}`;
 }
 
 function loadStoredChat(characterId: string, language: Language): Message[] | null {
+  if (!CHAT_PERSISTENCE_ENABLED) return null;
   try {
     const raw = localStorage.getItem(chatStorageKey(characterId, language));
     if (!raw) return null;
@@ -27,6 +29,7 @@ function loadStoredChat(characterId: string, language: Language): Message[] | nu
 }
 
 function saveStoredChat(characterId: string, language: Language, msgs: Message[]) {
+  if (!CHAT_PERSISTENCE_ENABLED) return;
   localStorage.setItem(
     chatStorageKey(characterId, language),
     JSON.stringify(msgs.map(m => ({ ...m, timestamp: m.timestamp.toISOString() })))
@@ -468,7 +471,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               )}
             >
               {msg.sender === 'fumo' && (
-                <img src={fumo.avatar} className="w-8 h-8 rounded-full border-2 border-white self-end mb-1" alt="" />
+                <img src={fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white self-end mb-1 fumo-shadow object-cover" alt="" />
               )}
               <div className={cn(
                 "p-3 rounded-2xl stitched-border text-sm leading-relaxed",
@@ -501,7 +504,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         
         {isTyping && (
           <div className="flex gap-2 mr-auto">
-            <img src={fumo.avatar} className="w-8 h-8 rounded-full border-2 border-white self-end mb-1" alt="" />
+            <img src={fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white self-end mb-1 fumo-shadow object-cover" alt="" />
             <div className="bg-white p-3 rounded-2xl rounded-tl-none stitched-border flex gap-1">
               <span className="w-1.5 h-1.5 bg-cream-accent rounded-full animate-bounce" />
               <span className="w-1.5 h-1.5 bg-cream-accent rounded-full animate-bounce [animation-delay:0.2s]" />
