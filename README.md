@@ -91,9 +91,9 @@ When adding a **new Fumo**, follow the Fumo form spec in the PRD. Strong image p
 
 ### Acknowledgements
 
-- **ZUN** — *Touhou Project*  
+- **ZUN 上海アリス幻樂団** — *Touhou Project*  
 - **Fumo designers**  
-- **“Nano Banana 2”** — product name in this README; underlying capabilities are provided by Gemini and related APIs  
+ 
 
 ### License
 

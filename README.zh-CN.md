@@ -91,9 +91,9 @@ npm run dev
 
 ### 致谢
 
-- **ZUN** — 东方 Project (Touhou Project)  
+- **ZUN 上海アリス幻樂団** — 东方 Project 
 - **Fumo 玩偶设计者**  
-- **Nano Banana 2** — 文档中的产品化命名；底层能力由 Gemini 等模型提供  
+
 
 ### 许可证
 
