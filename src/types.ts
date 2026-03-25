@@ -85,7 +85,7 @@ export const CHARACTERS: Character[] = [
   {
     id: 'reimu',
     name: { zh: '博丽灵梦', ja: '博麗霊夢', en: 'Hakurei Reimu' },
-    avatar: 'https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=200&h=200&auto=format&fit=crop',
+    avatar: '/avatars/reimu.png',
     description: {
       zh: '博丽神社的巫女。性格懒散但实力强大。',
       ja: '博麗神社の巫女。楽天的でマイペース。',
