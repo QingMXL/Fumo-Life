@@ -35,6 +35,15 @@ function saveStoredChat(characterId: string, language: Language, msgs: Message[]
   );
 }
 
+function lastTexts(msgs: Message[], count: number) {
+  const out: string[] = [];
+  for (let i = msgs.length - 1; i >= 0 && out.length < count; i--) {
+    const m = msgs[i]!;
+    if (m.sender === 'fumo' && m.text.trim().length > 0) out.push(m.text.trim());
+  }
+  return out;
+}
+
 function formatHHMM(ts: number) {
   const d = new Date(ts);
   const hh = String(d.getHours()).padStart(2, '0');
@@ -169,7 +178,17 @@ export default function App() {
       const pick = eligible[Math.floor(Math.random() * eligible.length)]!;
       const inChat = window.location.pathname === `/chat/${pick.id}`;
       if (inChat) return;
-      const text = pickIncomingPing(pick.id, language);
+      const existing = loadStoredChat(pick.id, language) ?? [];
+      const recent = new Set(lastTexts(existing, 4));
+      let text = '';
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const candidate = pickIncomingPing(pick.id, language);
+        if (!recent.has(candidate.trim())) {
+          text = candidate;
+          break;
+        }
+        text = candidate;
+      }
       const msg: Message = {
         id: `in-${now}-${Math.random().toString(36).slice(2, 7)}`,
         characterId: pick.id,
@@ -177,7 +196,6 @@ export default function App() {
         text,
         timestamp: new Date(now),
       };
-      const existing = loadStoredChat(pick.id, language) ?? [];
       const next = [...existing, msg].slice(-200);
       saveStoredChat(pick.id, language, next);
       updateConversationMeta(pick.id, text, now, { incrementUnread: true });

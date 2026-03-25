@@ -77,6 +77,30 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
 }
 
+function pickNonRepeatingText(
+  key: string,
+  pool: { zh: string; ja: string; en: string }[]
+): { zh: string; ja: string; en: string } {
+  if (pool.length <= 1) return pool[0]!;
+  const storageKey = `fumo-moment-reply-last:${key}`;
+  const last = (() => {
+    try {
+      return localStorage.getItem(storageKey) ?? '';
+    } catch {
+      return '';
+    }
+  })();
+  const candidates = pool.filter(t => t.zh !== last && t.ja !== last && t.en !== last);
+  const next = pick(candidates.length > 0 ? candidates : pool);
+  try {
+    // store zh lane; good enough to avoid immediate repeats across languages
+    localStorage.setItem(storageKey, next.zh);
+  } catch {
+    /* ignore */
+  }
+  return next;
+}
+
 function newCommentId(): string {
   return `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -102,7 +126,7 @@ export function buildEngagementForUserPost(
   const commenters = pickRandomCommenters(characters, null, count);
   const comments: MomentComment[] = commenters.map(c => {
     const pool = USER_POST_REPLIES[c.id] ?? USER_POST_REPLIES.reimu;
-    const text = pick(pool);
+    const text = pickNonRepeatingText(`userpost:${c.id}`, pool);
     return {
       id: newCommentId(),
       authorType: 'character',

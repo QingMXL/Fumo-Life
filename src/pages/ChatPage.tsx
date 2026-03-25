@@ -33,6 +33,25 @@ function saveStoredChat(characterId: string, language: Language, msgs: Message[]
   );
 }
 
+function normalizeChat(msgs: Message[]) {
+  // Collapse adjacent identical fumo texts (fixes old cached spam / ABAB loops).
+  const out: Message[] = [];
+  for (const m of msgs) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      prev.sender === 'fumo' &&
+      m.sender === 'fumo' &&
+      prev.text.trim() === m.text.trim() &&
+      prev.imageUrl === m.imageUrl
+    ) {
+      continue;
+    }
+    out.push(m);
+  }
+  return out;
+}
+
 /** Staggered unread bubbles when opening a thread with no local history. */
 function buildUnreadSeed(fumo: Character, lang: Language): Message[] {
   const n = Math.min(Math.max(fumo.unreadCount, 0), 5);
@@ -97,8 +116,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
     const stored = loadStoredChat(fumo.id, language);
     if (stored && stored.length > 0) {
-      setMessages(stored);
-      setRevealCount(stored.length);
+      const normalized = normalizeChat(stored);
+      setMessages(normalized);
+      setRevealCount(normalized.length);
       initialAnimCompleteRef.current = true;
       return;
     }
@@ -458,12 +478,21 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               )}>
                 {msg.text}
                 {msg.imageUrl && (
-                  <img 
-                    src={msg.imageUrl} 
-                    alt="Fumo Life" 
-                    className="mt-2 rounded-xl border-2 border-cream-border border-dashed w-full"
-                    referrerPolicy="no-referrer"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => window.open(msg.imageUrl, '_blank')}
+                    className={cn(
+                      "mt-2 block",
+                      msg.sender === 'user' ? "ml-auto" : "mr-auto"
+                    )}
+                  >
+                    <img 
+                      src={msg.imageUrl} 
+                      alt="Fumo Life" 
+                      className="rounded-xl border-2 border-cream-border border-dashed w-[220px] max-w-[65vw] h-auto object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  </button>
                 )}
               </div>
             </motion.div>
