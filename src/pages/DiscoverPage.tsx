@@ -175,6 +175,7 @@ const MOCK_MOMENTS: Moment[] = [
 ];
 
 const COMMENT_STAGGER_MS = 420;
+const FIXED_USER_NAME = '神社客';
 
 interface DiscoverPageProps {
   language: Language;
@@ -324,7 +325,8 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     const comment: MomentComment = {
       id: newCommentId(),
       authorType: 'user',
-      userDisplayName: userProfile.displayName,
+      // 按需求固定用户评论身份名，避免显示错乱
+      userDisplayName: FIXED_USER_NAME,
       userAvatarUrl: userProfile.avatarUrl,
       text: { zh: text.trim(), ja: text.trim(), en: text.trim() },
     };
@@ -375,7 +377,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
 
   const renderComment = (comment: MomentComment) => {
     if (comment.authorType === 'user') {
-      const name = comment.userDisplayName ?? userProfile.displayName;
+      const name = comment.userDisplayName ?? FIXED_USER_NAME;
       const avatar = comment.userAvatarUrl ?? userProfile.avatarUrl;
       return (
         <div
@@ -440,7 +442,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
               ? CHARACTERS.find(c => c.id === moment.characterId)
               : undefined;
           const posterName =
-            moment.authorType === 'user' ? userProfile.displayName : poster?.name[language];
+            moment.authorType === 'user' ? FIXED_USER_NAME : poster?.name[language];
           const posterAvatar =
             moment.authorType === 'user' ? userProfile.avatarUrl : poster?.avatar;
           const isLiked = likedMoments.has(moment.id);
