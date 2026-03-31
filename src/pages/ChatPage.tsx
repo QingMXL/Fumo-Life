@@ -6,35 +6,9 @@ import { generateFumoResponse } from '@/services/gemini';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
+import { fetchMessages, insertMessage, subscribeMessages } from '@/services/cloudStore';
 
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-
-const CHAT_STORAGE_PREFIX = 'fumo-chat-';
-const CHAT_PERSISTENCE_ENABLED = false;
-
-function chatStorageKey(characterId: string, language: Language) {
-  return `${CHAT_STORAGE_PREFIX}${characterId}:${language}`;
-}
-
-function loadStoredChat(characterId: string, language: Language): Message[] | null {
-  if (!CHAT_PERSISTENCE_ENABLED) return null;
-  try {
-    const raw = localStorage.getItem(chatStorageKey(characterId, language));
-    if (!raw) return null;
-    const arr = JSON.parse(raw) as Array<Omit<Message, 'timestamp'> & { timestamp: string }>;
-    return arr.map(m => ({ ...m, timestamp: new Date(m.timestamp) }));
-  } catch {
-    return null;
-  }
-}
-
-function saveStoredChat(characterId: string, language: Language, msgs: Message[]) {
-  if (!CHAT_PERSISTENCE_ENABLED) return;
-  localStorage.setItem(
-    chatStorageKey(characterId, language),
-    JSON.stringify(msgs.map(m => ({ ...m, timestamp: m.timestamp.toISOString() })))
-  );
-}
 
 function normalizeChat(msgs: Message[]) {
   // Collapse adjacent identical fumo texts (fixes old cached spam / ABAB loops).
@@ -82,6 +56,7 @@ function buildUnreadSeed(fumo: Character, lang: Language): Message[] {
 interface ChatPageProps {
   language: Language;
   characters: Character[];
+  userId: string;
   onUpdateBond: (id: string, amount: number) => void;
   onMarkChatRead: (id: string) => void;
   onConversationMeta: (characterId: string, lastText: string, at: number) => void;
@@ -90,6 +65,7 @@ interface ChatPageProps {
 export const ChatPage: React.FC<ChatPageProps> = ({
   language,
   characters,
+  userId,
   onUpdateBond,
   onMarkChatRead,
   onConversationMeta,
@@ -116,40 +92,62 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     if (!fumo) return;
     onMarkChatRead(fumo.id);
     initialAnimCompleteRef.current = false;
-
-    const stored = loadStoredChat(fumo.id, language);
-    if (stored && stored.length > 0) {
-      const normalized = normalizeChat(stored);
-      setMessages(normalized);
-      setRevealCount(normalized.length);
-      initialAnimCompleteRef.current = true;
-      return;
-    }
-
-    const seeds = buildUnreadSeed(fumo, language);
-    setMessages(seeds);
-    setRevealCount(0);
-    if (seeds.length === 0) {
-      initialAnimCompleteRef.current = true;
-      return;
-    }
-
-    let n = 0;
-    const interval = window.setInterval(() => {
-      n += 1;
-      setRevealCount(Math.min(n, seeds.length));
-      if (n >= seeds.length) {
-        window.clearInterval(interval);
+    let alive = true;
+    (async () => {
+      const cloud = await fetchMessages(userId, fumo.id);
+      if (!alive) return;
+      if (cloud.length > 0) {
+        const normalized = normalizeChat(cloud);
+        setMessages(normalized);
+        setRevealCount(normalized.length);
         initialAnimCompleteRef.current = true;
+        return;
       }
-    }, 520);
-    return () => window.clearInterval(interval);
-  }, [fumo?.id, language, onMarkChatRead]);
+      const seeds = buildUnreadSeed(fumo, language);
+      setMessages(seeds);
+      setRevealCount(0);
+      if (seeds.length === 0) {
+        initialAnimCompleteRef.current = true;
+        return;
+      }
+      let n = 0;
+      const interval = window.setInterval(() => {
+        n += 1;
+        setRevealCount(Math.min(n, seeds.length));
+        if (n >= seeds.length) {
+          window.clearInterval(interval);
+          initialAnimCompleteRef.current = true;
+        }
+      }, 520);
+      return () => window.clearInterval(interval);
+    })();
 
-  useEffect(() => {
-    if (!fumo?.id || messages.length === 0) return;
-    saveStoredChat(fumo.id, language, messages);
-  }, [messages, fumo?.id, language]);
+    const unsub = subscribeMessages(userId, fumo.id, m => {
+      setMessages(prev => {
+        if (prev.some(it => it.id === m.id)) return prev;
+        const idx = prev.findIndex(
+          it =>
+            it.id.startsWith('tmp-') &&
+            it.sender === m.sender &&
+            (it.text ?? '') === (m.text ?? '') &&
+            (it.imageUrl ?? '') === (m.imageUrl ?? '') &&
+            Math.abs(it.timestamp.getTime() - m.timestamp.getTime()) < 5000
+        );
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = m;
+          return next;
+        }
+        const next = [...prev, m];
+        syncRevealForAppend(next.length);
+        return next;
+      });
+    });
+    return () => {
+      alive = false;
+      unsub();
+    };
+  }, [fumo?.id, language, onMarkChatRead, userId]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -181,20 +179,19 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
   const handleGift = (gift: { id: string; name: Record<Language, string>; icon: string }) => {
     if (!fumo) return;
+    const giftText = `${language === 'zh' ? '送出了' : language === 'ja' ? 'を贈りました' : 'Gave'} ${gift.icon} ${gift.name[language]}`;
     const giftMsg: Message = {
-      id: Date.now().toString(),
+      id: `tmp-${Date.now()}`,
       characterId: fumo.id,
       sender: 'user',
-      text: `${language === 'zh' ? '送出了' : language === 'ja' ? 'を贈りました' : 'Gave'} ${gift.icon} ${gift.name[language]}`,
+      text: giftText,
       timestamp: new Date(),
     };
     const historyAfterGift = [...messages, giftMsg];
-    setMessages(prev => {
-      const next = [...prev, giftMsg];
-      syncRevealForAppend(next.length);
-      return next;
-    });
-    onConversationMeta(fumo.id, giftMsg.text, giftMsg.timestamp.getTime());
+    setMessages(prev => [...prev, giftMsg]);
+    syncRevealForAppend(messages.length + 1);
+    void insertMessage(userId, { characterId: fumo.id, sender: 'user', text: giftText });
+    onConversationMeta(fumo.id, giftText, Date.now());
     setShowGifts(false);
     
     // Update bond level
@@ -205,7 +202,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       setIsTyping(true);
       const reaction = await generateFumoResponse(fumo.id, historyAfterGift, `I gave you ${gift.name.en}.`, language);
       const reply: Message = {
-        id: (Date.now() + 1).toString(),
+        id: `tmp-${Date.now() + 1}`,
         characterId: fumo.id,
         sender: 'fumo',
         text: reaction,
@@ -216,6 +213,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         syncRevealForAppend(next.length);
         return next;
       });
+      void insertMessage(userId, { characterId: fumo.id, sender: 'fumo', text: reaction });
       onConversationMeta(fumo.id, reply.text, reply.timestamp.getTime());
       setIsTyping(false);
     }, 1000);
@@ -233,7 +231,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       if (!file) return;
       const url = URL.createObjectURL(file);
       const msg: Message = {
-        id: Date.now().toString(),
+        id: `tmp-${Date.now()}`,
         characterId: fumo.id,
         sender: 'user',
         text: '',
@@ -245,6 +243,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         syncRevealForAppend(next.length);
         return next;
       });
+      void insertMessage(userId, { characterId: fumo.id, sender: 'user', imageUrl: url, text: '' });
       onConversationMeta(fumo.id, language === 'zh' ? '[图片]' : language === 'ja' ? '[画像]' : '[Photo]', msg.timestamp.getTime());
     };
     picker.click();
@@ -258,7 +257,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     if (!input.trim()) return;
 
     const userMsg: Message = {
-      id: Date.now().toString(),
+      id: `tmp-${Date.now()}`,
       characterId: fumo.id,
       sender: 'user',
       text: input,
@@ -271,6 +270,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       syncRevealForAppend(next.length);
       return next;
     });
+    void insertMessage(userId, { characterId: fumo.id, sender: 'user', text: input });
     onConversationMeta(fumo.id, userMsg.text, userMsg.timestamp.getTime());
     setInput('');
     setIsTyping(true);
@@ -286,7 +286,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         if (i > 0) await new Promise(resolve => setTimeout(resolve, 800));
         
         const fumoMsg: Message = {
-          id: (Date.now() + i + 1).toString(),
+          id: `tmp-${Date.now() + i + 1}`,
           characterId: fumo.id,
           sender: 'fumo',
           text: parts[i],
@@ -297,6 +297,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           syncRevealForAppend(next.length);
           return next;
         });
+        void insertMessage(userId, { characterId: fumo.id, sender: 'fumo', text: parts[i] });
         onConversationMeta(fumo.id, fumoMsg.text, fumoMsg.timestamp.getTime());
       }
     } catch (error) {
@@ -330,7 +331,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
       if (imageUrl) {
         const fumoMsg: Message = {
-          id: Date.now().toString(),
+          id: `tmp-${Date.now()}`,
           characterId: fumo.id,
           sender: 'fumo',
           text: language === 'zh' ? '看！这是我刚才拍的照片捏~' : language === 'ja' ? '見て！さっき撮った写真だよ〜' : 'Look! Here is a photo I just took~',
@@ -341,6 +342,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           const next = [...prev, fumoMsg];
           syncRevealForAppend(next.length);
           return next;
+        });
+        void insertMessage(userId, {
+          characterId: fumo.id,
+          sender: 'fumo',
+          text: fumoMsg.text,
+          imageUrl: imageUrl,
         });
         onConversationMeta(fumo.id, fumoMsg.text, fumoMsg.timestamp.getTime());
       }

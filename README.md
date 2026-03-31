@@ -59,11 +59,20 @@ cd Fumo-Life
 npm install
 ```
 
-Copy the env template and add your Gemini API key:
+Copy the env template and set your keys:
 
 ```bash
 cp .env.example .env.local
-# Edit .env.local and set GEMINI_API_KEY
+# Edit .env.local and set:
+# GEMINI_API_KEY
+# VITE_SUPABASE_URL
+# VITE_SUPABASE_ANON_KEY
+```
+
+Initialize Supabase tables:
+
+```sql
+-- Run all SQL in supabase/schema.sql inside Supabase SQL Editor
 ```
 
 Run the dev server:

@@ -12,6 +12,15 @@ import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { buildEngagementForUserPost } from '@/data/momentNpcReplies';
+import {
+  createCharacterComment,
+  createUserComment,
+  createUserMoment,
+  ensureSeedCharacterMoments,
+  fetchMomentsFeed,
+  setLike,
+  subscribeMomentsRefresh,
+} from '@/services/cloudStore';
 
 function newCommentId(): string {
   return `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -169,6 +178,7 @@ const COMMENT_STAGGER_MS = 420;
 
 interface DiscoverPageProps {
   language: Language;
+  userId: string;
   userProfile: UserProfile;
   characters: Character[];
   onUnreadCountChange: (count: number) => void;
@@ -176,16 +186,40 @@ interface DiscoverPageProps {
 
 export const DiscoverPage: React.FC<DiscoverPageProps> = ({
   language,
+  userId,
   userProfile,
   characters,
   onUnreadCountChange,
 }) => {
-  const [moments, setMoments] = useState<Moment[]>(MOCK_MOMENTS);
+  const [moments, setMoments] = useState<Moment[]>([]);
 
   const [showPostModal, setShowPostModal] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
   const [newPostImageUrl, setNewPostImageUrl] = useState<string | null>(null);
   const [likedMoments, setLikedMoments] = useState<Set<string>>(new Set());
+  const reloadFeed = async () => {
+    const { moments: next, likedMomentIds } = await fetchMomentsFeed(userId);
+    setMoments(next);
+    setLikedMoments(likedMomentIds);
+  };
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      await ensureSeedCharacterMoments(MOCK_MOMENTS);
+      if (!alive) return;
+      await reloadFeed();
+    })();
+    const unsub = subscribeMomentsRefresh(() => {
+      void reloadFeed();
+    });
+    return () => {
+      alive = false;
+      unsub();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
   const [commentInputs, setCommentInputs] = useState<{ [key: string]: string }>({});
 
   const [commentVisible, setCommentVisible] = useState<Record<string, number>>({});
@@ -267,7 +301,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     void unreadCommentsTotal;
   }, [unreadCommentsTotal]);
 
-  const handleLike = (id: string) => {
+  const handleLike = async (id: string) => {
     const wasLiked = likedMoments.has(id);
     setLikedMoments(prev => {
       const next = new Set(prev);
@@ -280,9 +314,10 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
         item.id === id ? { ...item, likes: item.likes + (wasLiked ? -1 : 1) } : item
       )
     );
+    await setLike(userId, id, !wasLiked);
   };
 
-  const handleCommentSubmit = (momentId: string) => {
+  const handleCommentSubmit = async (momentId: string) => {
     const text = commentInputs[momentId];
     if (!text?.trim()) return;
 
@@ -298,9 +333,14 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
       prev.map(m => (m.id === momentId ? { ...m, comments: [...m.comments, comment] } : m))
     );
     setCommentInputs(prev => ({ ...prev, [momentId]: '' }));
+    await createUserComment(userId, momentId, {
+      zh: text.trim(),
+      ja: text.trim(),
+      en: text.trim(),
+    });
   };
 
-  const handlePost = () => {
+  const handlePost = async () => {
     if (!newPostContent.trim()) return;
     const engagement = buildEngagementForUserPost(characters, 5);
     const newMoment: Moment = {
@@ -313,13 +353,24 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
       },
       imageUrl: newPostImageUrl ?? undefined,
       timestamp: new Date(),
-      likes: engagement.likesDelta,
+      likes: 0,
       comments: engagement.comments,
     };
     setMoments(prev => [newMoment, ...prev]);
     setNewPostContent('');
     setNewPostImageUrl(null);
     setShowPostModal(false);
+    await createUserMoment(userId, {
+      content: newMoment.content,
+      imageUrl: newMoment.imageUrl,
+    });
+    // 角色自动互动写入云端
+    const { moments: refreshed } = await fetchMomentsFeed(userId);
+    const created = refreshed.find(m => m.authorType === 'user' && m.content.zh === newMoment.content.zh);
+    if (created) {
+      await Promise.all(engagement.comments.map(c => createCharacterComment(created.id, c)));
+    }
+    await reloadFeed();
   };
 
   const renderComment = (comment: MomentComment) => {

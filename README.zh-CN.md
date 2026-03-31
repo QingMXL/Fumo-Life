@@ -59,11 +59,20 @@ cd Fumo-Life
 npm install
 ```
 
-复制环境变量模板并填写 Gemini API Key：
+复制环境变量模板并填写密钥：
 
 ```bash
 cp .env.example .env.local
-# 编辑 .env.local，设置 GEMINI_API_KEY
+# 编辑 .env.local，设置：
+# GEMINI_API_KEY
+# VITE_SUPABASE_URL
+# VITE_SUPABASE_ANON_KEY
+```
+
+初始化 Supabase 数据表：
+
+```sql
+-- 在 Supabase SQL Editor 中执行 supabase/schema.sql 全部内容
 ```
 
 启动开发服务器：

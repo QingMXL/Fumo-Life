@@ -7,45 +7,23 @@ import { ChatPage } from './pages/ChatPage';
 import { ContactsPage } from './pages/ContactsPage';
 import { DiscoverPage } from './pages/DiscoverPage';
 import { MePage } from './pages/MePage';
+import { LoginPage } from './pages/LoginPage';
 import { pickIncomingPing } from './data/inboxNpcPings';
+import { type AppUser, restoreAuthUser } from './services/auth';
+import {
+  insertMessage,
+  loadBonds,
+  loadUnreadStates,
+  mapPreviewByLanguage,
+  saveUnreadState,
+  upsertBond,
+  updateCloudUserProfile,
+  withCharacterCloudState,
+} from './services/cloudStore';
 
 const USER_PROFILE_KEY = 'fumo-life-user-profile';
 const DISCOVER_UNREAD_KEY = 'fumo-discover-unread-count';
-const CHAT_STORAGE_PREFIX = 'fumo-chat-';
-const CHAT_PERSISTENCE_ENABLED = false;
-
-function chatStorageKey(characterId: string, language: Language) {
-  return `${CHAT_STORAGE_PREFIX}${characterId}:${language}`;
-}
-
-function loadStoredChat(characterId: string, language: Language): Message[] | null {
-  if (!CHAT_PERSISTENCE_ENABLED) return null;
-  try {
-    const raw = localStorage.getItem(chatStorageKey(characterId, language));
-    if (!raw) return null;
-    const arr = JSON.parse(raw) as Array<Omit<Message, 'timestamp'> & { timestamp: string }>;
-    return arr.map(m => ({ ...m, timestamp: new Date(m.timestamp) }));
-  } catch {
-    return null;
-  }
-}
-
-function saveStoredChat(characterId: string, language: Language, msgs: Message[]) {
-  if (!CHAT_PERSISTENCE_ENABLED) return;
-  localStorage.setItem(
-    chatStorageKey(characterId, language),
-    JSON.stringify(msgs.map(m => ({ ...m, timestamp: m.timestamp.toISOString() })))
-  );
-}
-
-function lastTexts(msgs: Message[], count: number) {
-  const out: string[] = [];
-  for (let i = msgs.length - 1; i >= 0 && out.length < count; i--) {
-    const m = msgs[i]!;
-    if (m.sender === 'fumo' && m.text.trim().length > 0) out.push(m.text.trim());
-  }
-  return out;
-}
+const LANGUAGE_KEY = 'fumo-language';
 
 function formatHHMM(ts: number) {
   const d = new Date(ts);
@@ -75,9 +53,14 @@ function migrateUserProfile(p: UserProfile): UserProfile {
 }
 
 export default function App() {
-  const [language, setLanguage] = useState<Language>('zh');
+  const [language, setLanguage] = useState<Language>(() => {
+    const raw = localStorage.getItem(LANGUAGE_KEY) as Language | null;
+    return raw === 'zh' || raw === 'ja' || raw === 'en' ? raw : 'zh';
+  });
   const [characters, setCharacters] = useState(INITIAL_CHARACTERS);
   const [userProfile, setUserProfile] = useState<UserProfile>(loadUserProfile);
+  const [authUser, setAuthUser] = useState<AppUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [discoverUnreadCount, setDiscoverUnreadCount] = useState(() => {
     const raw = localStorage.getItem(DISCOVER_UNREAD_KEY);
     const n = raw ? Number(raw) : 0;
@@ -88,23 +71,82 @@ export default function App() {
     localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(userProfile));
   }, [userProfile]);
 
-  const updateBond = useCallback((id: string, amount: number) => {
-    setCharacters(prev => prev.map(c => 
-      c.id === id
-        ? {
-            ...c,
-            bondLevel: Math.min(10, c.bondLevel + amount),
-            lastBondAt: Date.now(),
-          }
-        : c
-    ));
+  useEffect(() => {
+    if (!authUser) return;
+    void updateCloudUserProfile(authUser.id, {
+      username: userProfile.displayName || '神社客',
+      avatarUrl: userProfile.avatarUrl || '/avatars/user.png',
+    });
+  }, [authUser, userProfile.avatarUrl, userProfile.displayName]);
+
+  useEffect(() => {
+    localStorage.setItem(LANGUAGE_KEY, language);
+  }, [language]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const user = await restoreAuthUser();
+        if (!alive) return;
+        setAuthUser(user);
+        if (user) {
+          setUserProfile({
+            displayName: user.username || '神社客',
+            avatarUrl: user.avatarUrl || '/avatars/user.png',
+          });
+          const [unreadMap, bondMap] = await Promise.all([
+            loadUnreadStates(user.id),
+            loadBonds(user.id),
+          ]);
+          if (!alive) return;
+          setCharacters(prev => withCharacterCloudState(prev, unreadMap, bondMap));
+        }
+      } finally {
+        if (alive) setAuthLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, []);
+
+  const updateBond = useCallback((id: string, amount: number) => {
+    setCharacters(prev =>
+      prev.map(c =>
+        c.id === id
+          ? {
+              ...c,
+              bondLevel: Math.min(10, c.bondLevel + amount),
+              lastBondAt: Date.now(),
+            }
+          : c
+      )
+    );
+    if (authUser) {
+      const target = characters.find(c => c.id === id);
+      if (target) {
+        const nextBond = Math.min(10, target.bondLevel + amount);
+        void upsertBond(authUser.id, id, nextBond, Date.now());
+      }
+    }
+  }, [authUser, characters]);
 
   const markChatRead = useCallback((id: string) => {
     setCharacters(prev =>
       prev.map(c => (c.id === id ? { ...c, unreadCount: 0 } : c))
     );
-  }, []);
+    if (authUser) {
+      const c = characters.find(it => it.id === id);
+      void saveUnreadState(authUser.id, id, {
+        unreadCount: 0,
+        lastMessageZh: c?.lastMessage?.zh ?? '',
+        lastMessageJa: c?.lastMessage?.ja ?? '',
+        lastMessageEn: c?.lastMessage?.en ?? '',
+        lastMessageAt: c?.lastMessageAt,
+      });
+    }
+  }, [authUser, characters]);
 
   const refreshOnlineStatus = useCallback(() => {
     setCharacters(prev =>
@@ -139,8 +181,20 @@ export default function App() {
           };
         })
       );
+      if (authUser) {
+        const current = characters.find(c => c.id === characterId);
+        const nextUnread = opts?.incrementUnread ? (current?.unreadCount ?? 0) + 1 : (current?.unreadCount ?? 0);
+        const lane = mapPreviewByLanguage(language, lastText);
+        void saveUnreadState(authUser.id, characterId, {
+          unreadCount: nextUnread,
+          lastMessageZh: lane.zh || current?.lastMessage?.zh || '',
+          lastMessageJa: lane.ja || current?.lastMessage?.ja || '',
+          lastMessageEn: lane.en || current?.lastMessage?.en || '',
+          lastMessageAt: at,
+        });
+      }
     },
-    [language]
+    [authUser, characters, language]
   );
 
   const unreadMessagesTotal = useMemo(
@@ -162,16 +216,19 @@ export default function App() {
           if (c.bondLevel <= 0) return c;
           if (now - last < 5 * 60_000) return c;
           if (Math.random() < 0.16) {
-            return { ...c, bondLevel: Math.max(0, c.bondLevel - 1) };
+            const nextBond = Math.max(0, c.bondLevel - 1);
+            if (authUser) void upsertBond(authUser.id, c.id, nextBond, now);
+            return { ...c, bondLevel: nextBond };
           }
           return c;
         })
       );
     }, 70_000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [authUser]);
 
   useEffect(() => {
+    if (!authUser) return;
     // Simulated incoming: random character pings when not inside that chat.
     const interval = window.setInterval(() => {
       const now = Date.now();
@@ -180,30 +237,38 @@ export default function App() {
       const pick = eligible[Math.floor(Math.random() * eligible.length)]!;
       const inChat = window.location.pathname === `/chat/${pick.id}`;
       if (inChat) return;
-      const existing = loadStoredChat(pick.id, language) ?? [];
-      const recent = new Set(lastTexts(existing, 4));
-      let text = '';
-      for (let attempt = 0; attempt < 6; attempt++) {
-        const candidate = pickIncomingPing(pick.id, language);
-        if (!recent.has(candidate.trim())) {
-          text = candidate;
-          break;
-        }
-        text = candidate;
-      }
-      const msg: Message = {
-        id: `in-${now}-${Math.random().toString(36).slice(2, 7)}`,
+      const text = pickIncomingPing(pick.id, language);
+      void insertMessage(authUser.id, {
         characterId: pick.id,
         sender: 'fumo',
         text,
-        timestamp: new Date(now),
-      };
-      const next = [...existing, msg].slice(-200);
-      saveStoredChat(pick.id, language, next);
+      });
       updateConversationMeta(pick.id, text, now, { incrementUnread: true });
     }, 28_000 + Math.floor(Math.random() * 15_000));
     return () => window.clearInterval(interval);
-  }, [characters, language, updateConversationMeta]);
+  }, [authUser, characters, language, updateConversationMeta]);
+
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  if (!authUser) {
+    return (
+      <LoginPage
+        language={language}
+        onLanguageChange={setLanguage}
+        onLoginSuccess={async () => {
+          const user = await restoreAuthUser();
+          setAuthUser(user);
+          if (user) {
+            setUserProfile({ displayName: user.username, avatarUrl: user.avatarUrl || '/avatars/user.png' });
+            const [unreadMap, bondMap] = await Promise.all([loadUnreadStates(user.id), loadBonds(user.id)]);
+            setCharacters(prev => withCharacterCloudState(prev, unreadMap, bondMap));
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <Router>
@@ -216,6 +281,7 @@ export default function App() {
               <ChatPage
                 language={language}
                 characters={characters}
+                userId={authUser.id}
                 onUpdateBond={updateBond}
                 onMarkChatRead={markChatRead}
                 onConversationMeta={updateConversationMeta}
@@ -237,6 +303,7 @@ export default function App() {
             element={
               <DiscoverPage
                 language={language}
+                userId={authUser.id}
                 userProfile={userProfile}
                 characters={characters}
                 onUnreadCountChange={setDiscoverUnreadCount}
