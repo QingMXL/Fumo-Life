@@ -49,6 +49,13 @@ The art direction is **“soft enough to touch”**, not flat or sticker-like.
    - **Camera** — in-the-moment plush photos  
    - **Explore** — travel mechanics
 
+### Supabase auth & persistence
+
+- Username/password login and registration are enabled (default username: `神社客`).
+- Login state persists across refresh (local session + cloud profile lookup).
+- Chat history, moments, comments, likes, unread states, and bond levels are stored in Supabase.
+- Discover/chat data updates in near real-time via Supabase Realtime subscriptions.
+
 ### Quick start
 
 **Prerequisites:** Node.js (LTS recommended)
