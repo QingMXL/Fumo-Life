@@ -2,21 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { type Language, type Character, type UserProfile } from '@/types';
 import { Settings, Camera, Heart, Globe, Bell, Shield, X, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { fetchMyAlbumImages, type AlbumImageItem } from '@/services/cloudStore';
 
 interface MePageProps {
   language: Language;
   setLanguage: (lang: Language) => void;
   characters: Character[];
+  userId: string;
   userProfile: UserProfile;
   onUserProfileChange: (p: UserProfile) => void;
+  onSwitchUser: () => void;
+  onClearChats: () => Promise<void>;
 }
 
 export const MePage: React.FC<MePageProps> = ({
   language,
   setLanguage,
   characters,
+  userId,
   userProfile,
   onUserProfileChange,
+  onSwitchUser,
+  onClearChats,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(userProfile.displayName);
@@ -24,15 +31,11 @@ export const MePage: React.FC<MePageProps> = ({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showAlbum, setShowAlbum] = useState(false);
+  const [albumPhotos, setAlbumPhotos] = useState<AlbumImageItem[]>([]);
+  const [albumLoading, setAlbumLoading] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const totalBond = characters.reduce((acc, c) => acc + c.bondLevel, 0);
-
-  const albumPhotos = [
-    'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?q=80&w=400',
-    'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?q=80&w=400',
-    'https://images.unsplash.com/photo-1502082553048-f009c37129b9?q=80&w=400',
-    'https://images.unsplash.com/photo-1589656966895-2f33e7653819?q=80&w=400',
-  ];
 
   const [notifMessages, setNotifMessages] = useState(true);
   const [notifMoments, setNotifMoments] = useState(true);
@@ -40,6 +43,19 @@ export const MePage: React.FC<MePageProps> = ({
   useEffect(() => {
     setName(userProfile.displayName);
   }, [userProfile.displayName]);
+
+  useEffect(() => {
+    if (!showAlbum) return;
+    setAlbumLoading(true);
+    void fetchMyAlbumImages(userId)
+      .then(setAlbumPhotos)
+      .finally(() => setAlbumLoading(false));
+  }, [showAlbum, userId]);
+
+  useEffect(() => {
+    // 入口角标也显示真实数量：页面加载时预取一次。
+    void fetchMyAlbumImages(userId).then(setAlbumPhotos);
+  }, [userId]);
 
   const handleAvatarChange = () => {
     const input = document.createElement('input');
@@ -167,6 +183,40 @@ export const MePage: React.FC<MePageProps> = ({
         </button>
       </div>
 
+      <div className="mt-4 stitched-card p-2 space-y-2">
+        <button
+          type="button"
+          onClick={async () => {
+            const ok = window.confirm(
+              language === 'zh'
+                ? '确认清空所有聊天内容？该操作不可恢复。'
+                : language === 'ja'
+                  ? 'すべてのチャット履歴を削除しますか？この操作は元に戻せません。'
+                  : 'Clear all chat contents? This action cannot be undone.'
+            );
+            if (!ok) return;
+            await onClearChats();
+          }}
+          className="w-full p-3 rounded-2xl bg-white hover:bg-cream-accent/10 stitched-border text-sm font-bold transition-colors"
+        >
+          {language === 'zh' ? '清空所有聊天内容' : language === 'ja' ? 'チャット内容をすべて削除' : 'Clear All Chat Contents'}
+        </button>
+        <button
+          type="button"
+          onClick={onSwitchUser}
+          className="w-full p-3 rounded-2xl bg-white hover:bg-cream-accent/10 stitched-border text-sm font-bold transition-colors"
+        >
+          {language === 'zh' ? '切换用户' : language === 'ja' ? 'ユーザー切替' : 'Switch User'}
+        </button>
+        <button
+          type="button"
+          onClick={onSwitchUser}
+          className="w-full p-3 rounded-2xl bg-rose-50 text-rose-600 hover:bg-rose-100 stitched-border text-sm font-bold transition-colors"
+        >
+          {language === 'zh' ? '退出登录' : language === 'ja' ? 'ログアウト' : 'Logout'}
+        </button>
+      </div>
+
       {/* Modals */}
       <AnimatePresence>
         {showLanguage && (
@@ -238,13 +288,44 @@ export const MePage: React.FC<MePageProps> = ({
         {showAlbum && (
           <Modal title={language === 'zh' ? 'Fumo 相册' : 'アルバム'} onClose={() => setShowAlbum(false)}>
             <div className="grid grid-cols-2 gap-3">
-              {albumPhotos.map((url, i) => (
-                <div key={i} className="aspect-square rounded-2xl overflow-hidden stitched-border border-dashed">
-                  <img src={url} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+              {albumLoading ? (
+                <div className="col-span-2 text-center text-xs opacity-60 py-8">
+                  {language === 'zh' ? '加载中...' : language === 'ja' ? '読み込み中...' : 'Loading...'}
                 </div>
-              ))}
+              ) : albumPhotos.length === 0 ? (
+                <div className="col-span-2 text-center text-xs opacity-60 py-8">
+                  {language === 'zh' ? '暂无图片' : language === 'ja' ? '画像がありません' : 'No images yet'}
+                </div>
+              ) : (
+                albumPhotos.map(item => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    onClick={() => setPreviewImage(item.imageUrl)}
+                    className="aspect-square rounded-2xl overflow-hidden stitched-border border-dashed"
+                  >
+                    <img src={item.imageUrl} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                  </button>
+                ))
+              )}
             </div>
           </Modal>
+        )}
+        {previewImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4"
+            onClick={() => setPreviewImage(null)}
+          >
+            <img
+              src={previewImage}
+              className="max-w-full max-h-full rounded-2xl stitched-border border-white"
+              alt=""
+              referrerPolicy="no-referrer"
+            />
+          </motion.div>
         )}
       </AnimatePresence>
 

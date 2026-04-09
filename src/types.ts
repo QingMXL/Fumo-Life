@@ -14,6 +14,8 @@ export interface MomentComment {
   /** Snapshot when a user comments (display name may differ per language later) */
   userDisplayName?: string;
   userAvatarUrl?: string;
+  /** 来自 DB 时用于区分历史 / 新评论（动画）。 */
+  createdAt?: Date;
   text: {
     zh: string;
     ja: string;
@@ -61,6 +63,8 @@ export interface Message {
   text: string;
   timestamp: Date;
   imageUrl?: string;
+  /** 云端回写替换 tmp 消息时跳过入场动画，避免闪两次。 */
+  skipEntryAnimation?: boolean;
 }
 
 export interface Moment {
@@ -78,6 +82,8 @@ export interface Moment {
   imageUrl?: string;
   timestamp: Date;
   likes: number;
+  /** 角色互赞（NPC）；用于头像条展示。 */
+  likedByCharacters?: string[];
   comments: MomentComment[];
 }
 

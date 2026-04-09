@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { type Language, type Character } from '@/types';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -11,6 +11,28 @@ interface MessagesPageProps {
 
 export const MessagesPage: React.FC<MessagesPageProps> = ({ language, characters }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    console.log('[NAV][Messages] mounted', { path: window.location.pathname, ts: Date.now() });
+  }, []);
+
+  const goChat = (id: string) => {
+    console.log('[NAV][Messages] click card', { id, from: window.location.pathname, ts: Date.now() });
+    navigate(`/chat/${id}`);
+    console.log('[NAV][Messages] navigate()', { target: `/chat/${id}`, now: window.location.pathname });
+    // 路由异常时兜底：强制跳转，确保“点了有反应”
+    window.setTimeout(() => {
+      console.log('[NAV][Messages] 120ms check', {
+        target: `/chat/${id}`,
+        current: window.location.pathname,
+      });
+      if (window.location.pathname !== `/chat/${id}`) {
+        console.warn('[NAV][Messages] fallback location.assign', { target: `/chat/${id}` });
+        window.location.assign(`/chat/${id}`);
+      }
+    }, 120);
+  };
 
   const filteredCharacters = characters
     .filter(fumo => fumo.name[language].toLowerCase().includes(searchQuery.toLowerCase()))
@@ -45,9 +67,10 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ language, characters
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.075, duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
           >
-          <Link
-            to={`/chat/${fumo.id}`}
-            className="block stitched-card hover:translate-y-[-2px] transition-transform active:scale-95"
+                  <button
+                    type="button"
+                    onClick={() => goChat(fumo.id)}
+                    className="w-full text-left block stitched-card hover:translate-y-[-2px] transition-transform active:scale-95"
           >
             <div className="flex items-center gap-4">
               <div className="relative">
@@ -75,7 +98,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ language, characters
                 </div>
               </div>
             </div>
-          </Link>
+                  </button>
           </motion.div>
         ))}
       </div>

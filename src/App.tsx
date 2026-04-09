@@ -8,9 +8,11 @@ import { ContactsPage } from './pages/ContactsPage';
 import { DiscoverPage } from './pages/DiscoverPage';
 import { MePage } from './pages/MePage';
 import { LoginPage } from './pages/LoginPage';
-import { pickIncomingPing } from './data/inboxNpcPings';
-import { type AppUser, restoreAuthUser } from './services/auth';
+import { generateCharacterProactiveText, generateFumoSceneImage, shouldAttachAiImage } from './services/gemini';
+import { type AppUser, logout, restoreAuthUser } from './services/auth';
 import {
+  clearUserMessages,
+  createCharacterMoment,
   insertMessage,
   loadBonds,
   loadUnreadStates,
@@ -24,6 +26,7 @@ import {
 const USER_PROFILE_KEY = 'fumo-life-user-profile';
 const DISCOVER_UNREAD_KEY = 'fumo-discover-unread-count';
 const LANGUAGE_KEY = 'fumo-language';
+const CHAT_CLEARED_KEY_PREFIX = 'fumo-chat-cleared-at:';
 
 function formatHHMM(ts: number) {
   const d = new Date(ts);
@@ -79,6 +82,22 @@ export default function App() {
     });
   }, [authUser, userProfile.avatarUrl, userProfile.displayName]);
 
+  const handleSwitchUser = useCallback(() => {
+    // 清空当前登录态与本地展示态，返回登录页。
+    logout();
+    setAuthUser(null);
+    setCharacters(INITIAL_CHARACTERS);
+    setUserProfile({ displayName: '神社客', avatarUrl: '/avatars/user.png' });
+    setDiscoverUnreadCount(0);
+  }, []);
+
+  const handleClearChats = useCallback(async () => {
+    if (!authUser) return;
+    await clearUserMessages(authUser.id);
+    // 标记本次用户已主动清空，聊天页无历史时不再展示兜底开场白。
+    localStorage.setItem(`${CHAT_CLEARED_KEY_PREFIX}${authUser.id}`, String(Date.now()));
+  }, [authUser]);
+
   useEffect(() => {
     localStorage.setItem(LANGUAGE_KEY, language);
   }, [language]);
@@ -132,21 +151,23 @@ export default function App() {
     }
   }, [authUser, characters]);
 
+  // 使用函数式 setState，避免依赖 characters —— 否则 Chat 挂载时 markRead 触发引用变化，
+  // 会导致 ChatPage 的加载 effect 反复卸载并把 alive=false，云端历史永远不写入界面。
   const markChatRead = useCallback((id: string) => {
-    setCharacters(prev =>
-      prev.map(c => (c.id === id ? { ...c, unreadCount: 0 } : c))
-    );
-    if (authUser) {
-      const c = characters.find(it => it.id === id);
-      void saveUnreadState(authUser.id, id, {
-        unreadCount: 0,
-        lastMessageZh: c?.lastMessage?.zh ?? '',
-        lastMessageJa: c?.lastMessage?.ja ?? '',
-        lastMessageEn: c?.lastMessage?.en ?? '',
-        lastMessageAt: c?.lastMessageAt,
-      });
-    }
-  }, [authUser, characters]);
+    setCharacters(prev => {
+      const c = prev.find(it => it.id === id);
+      if (authUser && c) {
+        void saveUnreadState(authUser.id, id, {
+          unreadCount: 0,
+          lastMessageZh: c.lastMessage?.zh ?? '',
+          lastMessageJa: c.lastMessage?.ja ?? '',
+          lastMessageEn: c.lastMessage?.en ?? '',
+          lastMessageAt: c.lastMessageAt,
+        });
+      }
+      return prev.map(ch => (ch.id === id ? { ...ch, unreadCount: 0 } : ch));
+    });
+  }, [authUser]);
 
   const refreshOnlineStatus = useCallback(() => {
     setCharacters(prev =>
@@ -163,8 +184,26 @@ export default function App() {
 
   const updateConversationMeta = useCallback(
     (characterId: string, lastText: string, at: number, opts?: { incrementUnread?: boolean }) => {
-      setCharacters(prev =>
-        prev.map(c => {
+      setCharacters(prev => {
+        const current = prev.find(c => c.id === characterId);
+        if (!current) return prev;
+
+        const nextUnread = opts?.incrementUnread
+          ? (current.unreadCount ?? 0) + 1
+          : (current.unreadCount ?? 0);
+
+        if (authUser) {
+          const lane = mapPreviewByLanguage(language, lastText);
+          void saveUnreadState(authUser.id, characterId, {
+            unreadCount: nextUnread,
+            lastMessageZh: lane.zh || current.lastMessage?.zh || '',
+            lastMessageJa: lane.ja || current.lastMessage?.ja || '',
+            lastMessageEn: lane.en || current.lastMessage?.en || '',
+            lastMessageAt: at,
+          });
+        }
+
+        return prev.map(c => {
           if (c.id !== characterId) return c;
           return {
             ...c,
@@ -172,29 +211,16 @@ export default function App() {
               zh: c.lastMessage?.zh ?? lastText,
               ja: c.lastMessage?.ja ?? lastText,
               en: c.lastMessage?.en ?? lastText,
-              // store only the preview for current language by overwriting that lane
               [language]: lastText,
             } as any,
             lastMessageAt: at,
             lastTime: formatHHMM(at),
             unreadCount: opts?.incrementUnread ? (c.unreadCount ?? 0) + 1 : c.unreadCount,
           };
-        })
-      );
-      if (authUser) {
-        const current = characters.find(c => c.id === characterId);
-        const nextUnread = opts?.incrementUnread ? (current?.unreadCount ?? 0) + 1 : (current?.unreadCount ?? 0);
-        const lane = mapPreviewByLanguage(language, lastText);
-        void saveUnreadState(authUser.id, characterId, {
-          unreadCount: nextUnread,
-          lastMessageZh: lane.zh || current?.lastMessage?.zh || '',
-          lastMessageJa: lane.ja || current?.lastMessage?.ja || '',
-          lastMessageEn: lane.en || current?.lastMessage?.en || '',
-          lastMessageAt: at,
         });
-      }
+      });
     },
-    [authUser, characters, language]
+    [authUser, language]
   );
 
   const unreadMessagesTotal = useMemo(
@@ -229,7 +255,7 @@ export default function App() {
 
   useEffect(() => {
     if (!authUser) return;
-    // Simulated incoming: random character pings when not inside that chat.
+    // 角色主动消息：AI 文本 + 随机配图（20%-40%），带图时同步到 Moments。
     const interval = window.setInterval(() => {
       const now = Date.now();
       const eligible = characters.filter(c => c.isOnline);
@@ -237,13 +263,28 @@ export default function App() {
       const pick = eligible[Math.floor(Math.random() * eligible.length)]!;
       const inChat = window.location.pathname === `/chat/${pick.id}`;
       if (inChat) return;
-      const text = pickIncomingPing(pick.id, language);
-      void insertMessage(authUser.id, {
-        characterId: pick.id,
-        sender: 'fumo',
-        text,
-      });
-      updateConversationMeta(pick.id, text, now, { incrementUnread: true });
+      void (async () => {
+        const text = await generateCharacterProactiveText(pick.id, language, 'chat');
+        let imageUrl: string | undefined;
+        if (shouldAttachAiImage()) {
+          const img = await generateFumoSceneImage(pick.id, language, text);
+          if (img) imageUrl = img;
+        }
+        await insertMessage(authUser.id, {
+          characterId: pick.id,
+          sender: 'fumo',
+          text,
+          imageUrl,
+        });
+        if (imageUrl) {
+          // 仅有配图时写入角色动态，避免纯文本刷屏朋友圈。
+          await createCharacterMoment(pick.id, {
+            content: { zh: text, ja: text, en: text },
+            imageUrl,
+          });
+        }
+        updateConversationMeta(pick.id, imageUrl ? `${text} [Photo]` : text, now, { incrementUnread: true });
+      })();
     }, 28_000 + Math.floor(Math.random() * 15_000));
     return () => window.clearInterval(interval);
   }, [authUser, characters, language, updateConversationMeta]);
@@ -317,8 +358,11 @@ export default function App() {
                 language={language}
                 setLanguage={setLanguage}
                 characters={characters}
+                userId={authUser.id}
                 userProfile={userProfile}
                 onUserProfileChange={setUserProfile}
+                onSwitchUser={handleSwitchUser}
+                onClearChats={handleClearChats}
               />
             }
           />

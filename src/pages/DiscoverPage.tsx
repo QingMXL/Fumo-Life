@@ -7,17 +7,21 @@ import {
   type MomentComment,
   type UserProfile,
 } from '@/types';
-import { Heart, MessageCircle, Share2, Plus, Camera, X } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Plus, Camera, X, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { buildEngagementForUserPost } from '@/data/momentNpcReplies';
+import { CHARACTER_SEED_MOMENTS } from '@/data/characterSeedMoments';
+import { generateAiMomentCommentsForUserPost } from '@/services/gemini';
 import {
   createCharacterComment,
   createUserComment,
   createUserMoment,
+  deleteUserMoment,
   ensureSeedCharacterMoments,
   fetchMomentsFeed,
+  refreshCharacterMomentImagesByAi,
   setLike,
   subscribeMomentsRefresh,
 } from '@/services/cloudStore';
@@ -26,155 +30,15 @@ function newCommentId(): string {
   return `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-const MOCK_MOMENTS: Moment[] = [
-  {
-    id: '1',
-    authorType: 'character',
-    characterId: 'reimu',
-    content: {
-      zh: '今天神社也很清闲呢，要是有人来塞钱就好了...（瘫倒在垫子上）',
-      ja: '今日も神社は暇ね。誰かお賽銭を入れに来てくれないかしら…（座布団に倒れ込む）',
-      en: 'The shrine is quiet again today. I wish someone would come and donate... (*collapses on cushion*)',
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?q=80&w=800&auto=format&fit=crop',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    likes: 24,
-    comments: [
-      {
-        id: 'm1-1',
-        authorType: 'character',
-        characterId: 'marisa',
-        text: {
-          zh: '我这就去！顺便借走你的茶叶DAZE！',
-          ja: '今行くぜ！ついでにお茶っ葉を借りていくのぜ！',
-          en: "I'm coming! And I'll borrow your tea leaves too DAZE!",
-        },
-      },
-      {
-        id: 'm1-2',
-        authorType: 'character',
-        characterId: 'patchouli',
-        text: {
-          zh: '神社的安静……适合看书。别指望我去塞钱。',
-          ja: '神社の静けさ……読書には向くわ。お賽銭は期待しないで。',
-          en: 'Quiet at the shrine... good for reading. Don’t expect a donation from me.',
-        },
-      },
-      {
-        id: 'm1-3',
-        authorType: 'character',
-        characterId: 'sanae',
-        text: {
-          zh: '灵梦小姐要不要来守矢看看？信仰也能换换口味哦～',
-          ja: '霊夢さん、守矢に来てみる？信仰も気分転換になるよ～',
-          en: 'Reimu, want to visit Moriya? A change of faith might be nice~',
-        },
-      },
-      {
-        id: 'm1-4',
-        authorType: 'character',
-        characterId: 'koishi',
-        text: {
-          zh: '我在你背后哦……骗你的。',
-          ja: '後ろにいるよ……なんてね。',
-          en: "I'm right behind you... just kidding.",
-        },
-      },
-    ],
-  },
-  {
-    id: '2',
-    authorType: 'character',
-    characterId: 'marisa',
-    content: {
-      zh: '在魔法之森发现了一颗亮晶晶的蘑菇！这一定是稀有材料DAZE！',
-      ja: '魔法の森でキラキラしたキノコを見つけたぜ！これはきっとレアな素材だぜ！',
-      en: 'Found a sparkly mushroom in the Forest of Magic! This must be a rare ingredient DAZE!',
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?q=80&w=800&auto=format&fit=crop',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5),
-    likes: 42,
-    comments: [
-      {
-        id: 'm2-1',
-        authorType: 'character',
-        characterId: 'patchouli',
-        text: {
-          zh: '那种蘑菇多半有毒……别又把实验室炸了。',
-          ja: 'そのキノコ、たぶん毒よ……またアトリエを爆発させないで。',
-          en: 'That mushroom is probably poisonous... don’t blow up your lab again.',
-        },
-      },
-      {
-        id: 'm2-2',
-        authorType: 'character',
-        characterId: 'reimu',
-        text: {
-          zh: '别把奇怪的东西带回神社附近。',
-          ja: '変なものを神社の近くに持ち込まないで。',
-          en: 'Don’t bring weird stuff near the shrine.',
-        },
-      },
-      {
-        id: 'm2-3',
-        authorType: 'character',
-        characterId: 'suwako',
-        text: {
-          zh: '咯咯，采蘑菇的小魔法使～',
-          ja: 'けろけろ、キノコ狩りの魔法使い～',
-          en: 'Kero kero, mushroom-hunting magician~',
-        },
-      },
-    ],
-  },
-  {
-    id: '3',
-    authorType: 'character',
-    characterId: 'sakuya',
-    content: {
-      zh: '大小姐今天的下午茶是红茶和特制小蛋糕。时间停止的一瞬间，奶油的香气最浓郁。',
-      ja: 'お嬢様の今日のお茶会は、紅茶と特製ケーキです。時を止めた瞬間、クリームの香りが一番引き立ちます。',
-      en: "Mistress's afternoon tea today is black tea and special cupcakes. The aroma of cream is richest at the moment time stops.",
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?q=80&w=800',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 12),
-    likes: 56,
-    comments: [
-      {
-        id: 'm3-1',
-        authorType: 'character',
-        characterId: 'remilia',
-        text: {
-          zh: '做得不错，咲夜。',
-          ja: 'よくやったわ、咲夜。',
-          en: 'Well done, Sakuya.',
-        },
-      },
-      {
-        id: 'm3-2',
-        authorType: 'character',
-        characterId: 'yuyuko',
-        text: {
-          zh: '我也想吃……咲夜偏心～',
-          ja: '私も食べたい……咲夜のえこひいき～',
-          en: 'I want some too... Sakuya plays favorites~',
-        },
-      },
-      {
-        id: 'm3-3',
-        authorType: 'character',
-        characterId: 'patchouli',
-        text: {
-          zh: '红魔馆的点心……书库里可闻不到。',
-          ja: '紅魔館のお菓子……書庫には香ってこないわ。',
-          en: 'Scarlet sweets... the library never smells like that.',
-        },
-      },
-    ],
-  },
-];
+function shuffle<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+}
 
-const COMMENT_STAGGER_MS = 420;
 const FIXED_USER_NAME = '神社客';
 
 interface DiscoverPageProps {
@@ -198,18 +62,27 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
   const [newPostContent, setNewPostContent] = useState('');
   const [newPostImageUrl, setNewPostImageUrl] = useState<string | null>(null);
   const [likedMoments, setLikedMoments] = useState<Set<string>>(new Set());
+  const npcCommentTimersRef = useRef<number[]>([]);
+  /** 首次拉取完成时间：此前评论视为历史静态；仅之后新评论播放入场动画。 */
+  const [feedHydrateAt, setFeedHydrateAt] = useState<number | null>(null);
+
   const reloadFeed = async () => {
     const { moments: next, likedMomentIds } = await fetchMomentsFeed(userId);
     setMoments(next);
     setLikedMoments(likedMomentIds);
+    setFeedHydrateAt(prev => prev ?? Date.now());
   };
 
   useEffect(() => {
     let alive = true;
+    setFeedHydrateAt(null);
     (async () => {
-      await ensureSeedCharacterMoments(MOCK_MOMENTS);
+      await ensureSeedCharacterMoments(CHARACTER_SEED_MOMENTS);
       if (!alive) return;
       await reloadFeed();
+      // 后台修复旧动态占位图：改成与文案匹配的 AI 图（Nano Banana/Gemini）。
+      const changed = await refreshCharacterMomentImagesByAi(4);
+      if (alive && changed > 0) await reloadFeed();
     })();
     const unsub = subscribeMomentsRefresh(() => {
       void reloadFeed();
@@ -222,30 +95,6 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
   }, [userId]);
 
   const [commentInputs, setCommentInputs] = useState<{ [key: string]: string }>({});
-
-  const [commentVisible, setCommentVisible] = useState<Record<string, number>>({});
-  const commentsSig = useMemo(
-    () =>
-      moments
-        .map(m => `${m.id}:${m.comments.map(c => c.id).join(',')}`)
-        .join('|'),
-    [moments]
-  );
-
-  useEffect(() => {
-    setCommentVisible({});
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    moments.forEach(m => {
-      m.comments.forEach((_, idx) => {
-        timers.push(
-          setTimeout(() => {
-            setCommentVisible(prev => ({ ...prev, [m.id]: idx + 1 }));
-          }, idx * COMMENT_STAGGER_MS)
-        );
-      });
-    });
-    return () => timers.forEach(clearTimeout);
-  }, [commentsSig]);
 
   // For discover unread: only count NEW character-comments on USER-authored moments.
   const readBaseline = useRef<Record<string, { characterCommentsRead: number }>>({});
@@ -325,9 +174,9 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     const comment: MomentComment = {
       id: newCommentId(),
       authorType: 'user',
-      // 按需求固定用户评论身份名，避免显示错乱
       userDisplayName: FIXED_USER_NAME,
       userAvatarUrl: userProfile.avatarUrl,
+      createdAt: new Date(),
       text: { zh: text.trim(), ja: text.trim(), en: text.trim() },
     };
 
@@ -344,7 +193,21 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
 
   const handlePost = async () => {
     if (!newPostContent.trim()) return;
-    const engagement = buildEngagementForUserPost(characters, 5);
+    // 优先走 Gemini 生成角色评论；失败时回退静态模板，保证可用性。
+    let aiComments: MomentComment[] = [];
+    try {
+      aiComments = await generateAiMomentCommentsForUserPost(
+        characters,
+        language,
+        newPostContent.trim(),
+        5
+      );
+    } catch {
+      aiComments = [];
+    }
+    const engagement = aiComments.length > 0
+      ? { likesDelta: aiComments.length, comments: aiComments }
+      : buildEngagementForUserPost(characters, 5);
     const newMoment: Moment = {
       id: Date.now().toString(),
       authorType: 'user',
@@ -356,7 +219,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
       imageUrl: newPostImageUrl ?? undefined,
       timestamp: new Date(),
       likes: 0,
-      comments: engagement.comments,
+      comments: [],
     };
     setMoments(prev => [newMoment, ...prev]);
     setNewPostContent('');
@@ -370,20 +233,55 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     const { moments: refreshed } = await fetchMomentsFeed(userId);
     const created = refreshed.find(m => m.authorType === 'user' && m.content.zh === newMoment.content.zh);
     if (created) {
-      await Promise.all(engagement.comments.map(c => createCharacterComment(created.id, c)));
+      // 仿微信：评论随机顺序、随机角色、按间隔逐条出现，避免一次性刷出。
+      const queue = shuffle(engagement.comments);
+      let delay = 800 + Math.floor(Math.random() * 1000);
+      queue.forEach(c => {
+        const timer = window.setTimeout(() => {
+          void createCharacterComment(created.id, c);
+        }, delay);
+        npcCommentTimersRef.current.push(timer);
+        delay += 1500 + Math.floor(Math.random() * 2200);
+      });
     }
     await reloadFeed();
   };
 
+  const handleDeleteMoment = async (moment: Moment) => {
+    if (moment.authorType !== 'user') return;
+    const ok = window.confirm(
+      language === 'zh'
+        ? '确认删除这条动态？删除后无法恢复。'
+        : language === 'ja'
+          ? 'この投稿を削除しますか？削除後は復元できません。'
+          : 'Delete this moment? This action cannot be undone.'
+    );
+    if (!ok) return;
+    setMoments(prev => prev.filter(m => m.id !== moment.id));
+    try {
+      await deleteUserMoment(userId, moment.id);
+    } catch (e) {
+      console.error('deleteUserMoment failed:', e);
+      await reloadFeed();
+    }
+  };
+
+  const commentShouldEnterAnimate = (comment: MomentComment) => {
+    if (feedHydrateAt == null) return false;
+    const t = comment.createdAt?.getTime() ?? 0;
+    return t > feedHydrateAt;
+  };
+
   const renderComment = (comment: MomentComment) => {
+    const enter = commentShouldEnterAnimate(comment);
+    const boxClass =
+      'flex gap-2 text-xs bg-cream-accent/10 p-2 rounded-xl border border-cream-border border-dashed';
+
     if (comment.authorType === 'user') {
       const name = comment.userDisplayName ?? FIXED_USER_NAME;
       const avatar = comment.userAvatarUrl ?? userProfile.avatarUrl;
-      return (
-        <div
-          key={comment.id}
-          className="flex gap-2 text-xs bg-cream-accent/10 p-2 rounded-xl border border-cream-border border-dashed"
-        >
+      const inner = (
+        <>
           <img
             src={avatar}
             className="w-7 h-7 rounded-full border border-white shrink-0 object-cover"
@@ -394,15 +292,26 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
             <span className="font-bold mr-1">{name}</span>
             <span className="opacity-70">{comment.text[language]}</span>
           </div>
+        </>
+      );
+      return enter ? (
+        <motion.div
+          key={comment.id}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={boxClass}
+        >
+          {inner}
+        </motion.div>
+      ) : (
+        <div key={comment.id} className={boxClass}>
+          {inner}
         </div>
       );
     }
     const commenter = CHARACTERS.find(c => c.id === comment.characterId);
-    return (
-      <div
-        key={comment.id}
-        className="flex gap-2 text-xs bg-cream-accent/10 p-2 rounded-xl border border-cream-border border-dashed"
-      >
+    const inner = (
+      <>
         <img
           src={commenter?.avatar}
           className="w-7 h-7 rounded-full border border-white shrink-0 object-cover"
@@ -413,6 +322,20 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
           <span className="font-bold mr-1">{commenter?.name[language]}:</span>
           <span className="opacity-70">{comment.text[language]}</span>
         </div>
+      </>
+    );
+    return enter ? (
+      <motion.div
+        key={comment.id}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={boxClass}
+      >
+        {inner}
+      </motion.div>
+    ) : (
+      <div key={comment.id} className={boxClass}>
+        {inner}
       </div>
     );
   };
@@ -447,20 +370,40 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
             moment.authorType === 'user' ? userProfile.avatarUrl : poster?.avatar;
           const isLiked = likedMoments.has(moment.id);
           const unread = getMomentUnreadCharacterComments(moment) > 0;
+          const unreadCount = getMomentUnreadCharacterComments(moment);
           const currentCharacterComments =
             moment.authorType === 'user'
               ? moment.comments.filter(c => c.authorType === 'character').length
               : 0;
-          const visibleN = commentVisible[moment.id] ?? 0;
-          const shownComments = moment.comments.slice(0, visibleN);
 
           return (
             <div key={moment.id} className="stitched-card p-0 overflow-hidden relative">
               {unread && (
                 <span
-                  className="absolute top-3 right-3 z-10 min-w-[10px] h-[10px] rounded-full bg-[#FF4D4D] border-2 border-white fumo-shadow"
-                  title={language === 'zh' ? '新互动' : language === 'ja' ? '新着' : 'New activity'}
-                />
+                  className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-full bg-[#FF4D4D] text-white text-[10px] font-black border-2 border-white fumo-shadow leading-none"
+                  title={
+                    language === 'zh'
+                      ? `+${unreadCount} 新评论`
+                      : language === 'ja'
+                        ? `+${unreadCount} 新着コメント`
+                        : `+${unreadCount} New comments`
+                  }
+                >
+                  {`+${unreadCount}`}
+                </span>
+              )}
+              {moment.authorType === 'user' && (
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteMoment(moment)}
+                  className={cn(
+                    "absolute z-10 p-2 rounded-full opacity-60 hover:opacity-100 hover:bg-rose-50 text-rose-500 transition-colors",
+                    unread ? "top-2 right-14" : "top-2 right-2"
+                  )}
+                  title={language === 'zh' ? '删除动态' : language === 'ja' ? '投稿を削除' : 'Delete moment'}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               )}
 
               <button
@@ -503,13 +446,13 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
                 />
               ) : null}
 
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
+              <div className="p-4 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-3 flex-wrap">
                   <button
                     type="button"
                     onClick={() => handleLike(moment.id)}
                     className={cn(
-                      'flex items-center gap-1 transition-all active:scale-125',
+                      'flex items-center gap-1 transition-all active:scale-125 shrink-0',
                       isLiked ? 'opacity-100' : 'opacity-60 hover:opacity-100'
                     )}
                   >
@@ -521,6 +464,31 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
                     />
                     <span className="text-xs font-bold">{moment.likes}</span>
                   </button>
+                  {moment.likedByCharacters && moment.likedByCharacters.length > 0 ? (
+                    <div
+                      className="flex items-center -space-x-2 pl-1"
+                      title={
+                        language === 'zh'
+                          ? '角色们也点了赞'
+                          : language === 'ja'
+                            ? 'キャラクターからのいいね'
+                            : 'Character likes'
+                      }
+                    >
+                      {moment.likedByCharacters.slice(0, 8).map(cid => {
+                        const ch = CHARACTERS.find(c => c.id === cid);
+                        return (
+                          <img
+                            key={`${moment.id}-${cid}`}
+                            src={ch?.avatar}
+                            alt=""
+                            className="w-7 h-7 rounded-full border-2 border-white object-cover fumo-shadow"
+                            referrerPolicy="no-referrer"
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : null}
                   <div className="flex items-center gap-1 opacity-60">
                     <MessageCircle className="w-5 h-5" />
                     <span className="text-xs font-bold">{moment.comments.length}</span>
@@ -531,8 +499,8 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
                 </button>
               </div>
 
-              {shownComments.length > 0 && (
-                <div className="px-4 pb-4 space-y-2">{shownComments.map(renderComment)}</div>
+              {moment.comments.length > 0 && (
+                <div className="px-4 pb-4 space-y-2">{moment.comments.map(renderComment)}</div>
               )}
 
               <div className="px-4 pb-4 flex gap-2">

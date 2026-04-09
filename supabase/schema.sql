@@ -33,6 +33,7 @@ create table if not exists public.moments (
   text_ja text not null,
   text_en text not null,
   image_url text,
+  base_likes int not null default 12,
   created_at timestamptz not null default now()
 );
 create index if not exists idx_moments_time on public.moments(created_at desc);
@@ -59,6 +60,16 @@ create table if not exists public.likes (
   unique (moment_id, user_id)
 );
 create index if not exists idx_likes_moment on public.likes(moment_id);
+
+-- 角色之间点赞（不关联 users 表）
+create table if not exists public.character_likes (
+  id uuid primary key default gen_random_uuid(),
+  moment_id uuid not null references public.moments(id) on delete cascade,
+  character_id text not null,
+  created_at timestamptz not null default now(),
+  unique (moment_id, character_id)
+);
+create index if not exists idx_character_likes_moment on public.character_likes(moment_id);
 
 create table if not exists public.bonds (
   id uuid primary key default gen_random_uuid(),
@@ -88,6 +99,7 @@ alter table public.messages enable row level security;
 alter table public.moments enable row level security;
 alter table public.comments enable row level security;
 alter table public.likes enable row level security;
+alter table public.character_likes enable row level security;
 alter table public.bonds enable row level security;
 alter table public.unread_states enable row level security;
 
@@ -107,6 +119,9 @@ create policy open_comments on public.comments for all using (true) with check (
 
 drop policy if exists open_likes on public.likes;
 create policy open_likes on public.likes for all using (true) with check (true);
+
+drop policy if exists open_character_likes on public.character_likes;
+create policy open_character_likes on public.character_likes for all using (true) with check (true);
 
 drop policy if exists open_bonds on public.bonds;
 create policy open_bonds on public.bonds for all using (true) with check (true);

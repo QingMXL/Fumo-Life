@@ -1,14 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Camera, Gift, MapPin, Send, Smile, Heart } from 'lucide-react';
+import { ChevronLeft, Camera, Gift, MapPin, Send, Smile, Heart, MoreHorizontal } from 'lucide-react';
 import { type Language, type Message, type Character } from '@/types';
-import { generateFumoResponse } from '@/services/gemini';
+import {
+  generateFumoResponse,
+  generateFumoSceneImage,
+  shouldAttachAiImage,
+} from '@/services/gemini';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from "@google/genai";
-import { fetchMessages, insertMessage, subscribeMessages } from '@/services/cloudStore';
+import {
+  createCharacterMoment,
+  deleteUserMessage,
+  fetchMessages,
+  insertMessage,
+  subscribeMessages,
+} from '@/services/cloudStore';
 
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+const CHAT_CLEARED_KEY_PREFIX = 'fumo-chat-cleared-at:';
 
 function normalizeChat(msgs: Message[]) {
   // Collapse adjacent identical fumo texts (fixes old cached spam / ABAB loops).
@@ -53,6 +62,25 @@ function buildUnreadSeed(fumo: Character, lang: Language): Message[] {
   return out;
 }
 
+/** 当云端暂无历史且未读为 0 时，提供一条开场消息，避免页面空白。 */
+function buildStarterMessage(fumo: Character, lang: Language): Message {
+  const text =
+    fumo.lastMessage?.[lang] ??
+    (lang === 'zh'
+      ? '……在吗？今天过得怎么样。'
+      : lang === 'ja'
+        ? '……いる？今日はどうだった？'
+        : '...You there? How was your day?');
+  return {
+    id: `starter-${fumo.id}`,
+    characterId: fumo.id,
+    sender: 'fumo',
+    text,
+    // 视为“历史开场白”，避免被当作新消息播动画
+    timestamp: new Date(Date.now() - 120_000),
+  };
+}
+
 interface ChatPageProps {
   language: Language;
   characters: Character[];
@@ -72,54 +100,79 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const goMessages = () => {
+    console.log('[NAV][Chat] click back', { from: window.location.pathname, ts: Date.now() });
+    navigate('/');
+    console.log('[NAV][Chat] navigate("/")', { now: window.location.pathname });
+    // 兜底：若路由未切换，直接浏览器跳转
+    window.setTimeout(() => {
+      console.log('[NAV][Chat] 120ms back check', { current: window.location.pathname });
+      if (window.location.pathname !== '/') {
+        console.warn('[NAV][Chat] fallback location.assign("/")');
+        window.location.assign('/');
+      }
+    }, 120);
+  };
+
   const fumo = characters.find(c => c.id === id);
+  useEffect(() => {
+    console.log('[NAV][Chat] mounted', { id, path: window.location.pathname, ts: Date.now() });
+  }, [id]);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [revealCount, setRevealCount] = useState(0);
-  const initialAnimCompleteRef = useRef(true);
+  /**  hydration 时间：在此之前加载的历史消息不播入场动画；仅之后产生的新消息播放。 */
+  const [hydrateAt, setHydrateAt] = useState<number | null>(null);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [menuMessage, setMenuMessage] = useState<Message | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const visibleMessages = messages.slice(0, revealCount);
-
-  const syncRevealForAppend = (nextLen: number) => {
-    queueMicrotask(() => {
-      if (initialAnimCompleteRef.current) setRevealCount(nextLen);
-    });
-  };
+  const messageEnterAnimate = (msg: Message) =>
+    hydrateAt != null &&
+    !msg.skipEntryAnimation &&
+    msg.timestamp.getTime() > hydrateAt;
 
   useEffect(() => {
     if (!fumo) return;
+    setMessages([]);
+    setHydrateAt(null);
     onMarkChatRead(fumo.id);
-    initialAnimCompleteRef.current = false;
     let alive = true;
+    const FETCH_DEADLINE_MS = 10_000;
     (async () => {
-      const cloud = await fetchMessages(userId, fumo.id);
+      let cloud: Message[] = [];
+      try {
+        cloud = await Promise.race([
+          fetchMessages(userId, fumo.id),
+          new Promise<Message[]>((_, reject) => {
+            window.setTimeout(() => reject(new Error('fetchMessages timeout')), FETCH_DEADLINE_MS);
+          }),
+        ]);
+      } catch (e) {
+        console.error('fetchMessages failed, fallback to seeded chat:', e);
+      }
       if (!alive) return;
+      const markHydrated = (batch: Message[]) => {
+        const t = Date.now();
+        setMessages(batch);
+        setHydrateAt(t);
+      };
       if (cloud.length > 0) {
-        const normalized = normalizeChat(cloud);
-        setMessages(normalized);
-        setRevealCount(normalized.length);
-        initialAnimCompleteRef.current = true;
+        markHydrated(normalizeChat(cloud));
+        return;
+      }
+      // 用户手动“清空聊天内容”后，无历史时保持空白，等待新消息。
+      const clearedAt = localStorage.getItem(`${CHAT_CLEARED_KEY_PREFIX}${userId}`);
+      if (clearedAt) {
+        markHydrated([]);
         return;
       }
       const seeds = buildUnreadSeed(fumo, language);
-      setMessages(seeds);
-      setRevealCount(0);
       if (seeds.length === 0) {
-        initialAnimCompleteRef.current = true;
+        markHydrated([buildStarterMessage(fumo, language)]);
         return;
       }
-      let n = 0;
-      const interval = window.setInterval(() => {
-        n += 1;
-        setRevealCount(Math.min(n, seeds.length));
-        if (n >= seeds.length) {
-          window.clearInterval(interval);
-          initialAnimCompleteRef.current = true;
-        }
-      }, 520);
-      return () => window.clearInterval(interval);
+      markHydrated(seeds);
     })();
 
     const unsub = subscribeMessages(userId, fumo.id, m => {
@@ -135,12 +188,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         );
         if (idx >= 0) {
           const next = [...prev];
-          next[idx] = m;
+          next[idx] = { ...m, skipEntryAnimation: true };
           return next;
         }
-        const next = [...prev, m];
-        syncRevealForAppend(next.length);
-        return next;
+        return [...prev, m];
       });
     });
     return () => {
@@ -153,7 +204,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [visibleMessages, isTyping, revealCount]);
+  }, [messages, isTyping]);
 
   const [showGifts, setShowGifts] = useState(false);
   const [showExplore, setShowExplore] = useState(false);
@@ -189,7 +240,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     };
     const historyAfterGift = [...messages, giftMsg];
     setMessages(prev => [...prev, giftMsg]);
-    syncRevealForAppend(messages.length + 1);
     void insertMessage(userId, { characterId: fumo.id, sender: 'user', text: giftText });
     onConversationMeta(fumo.id, giftText, Date.now());
     setShowGifts(false);
@@ -201,20 +251,33 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     setTimeout(async () => {
       setIsTyping(true);
       const reaction = await generateFumoResponse(fumo.id, historyAfterGift, `I gave you ${gift.name.en}.`, language);
+      let reactionImage: string | undefined;
+      if (shouldAttachAiImage()) {
+        const img = await generateFumoSceneImage(fumo.id, language, reaction);
+        if (img) reactionImage = img;
+      }
       const reply: Message = {
         id: `tmp-${Date.now() + 1}`,
         characterId: fumo.id,
         sender: 'fumo',
         text: reaction,
         timestamp: new Date(),
+        imageUrl: reactionImage,
       };
-      setMessages(prev => {
-        const next = [...prev, reply];
-        syncRevealForAppend(next.length);
-        return next;
+      setMessages(prev => [...prev, reply]);
+      void insertMessage(userId, {
+        characterId: fumo.id,
+        sender: 'fumo',
+        text: reaction,
+        imageUrl: reactionImage,
       });
-      void insertMessage(userId, { characterId: fumo.id, sender: 'fumo', text: reaction });
-      onConversationMeta(fumo.id, reply.text, reply.timestamp.getTime());
+      if (reactionImage) {
+        void createCharacterMoment(fumo.id, {
+          content: { zh: reaction, ja: reaction, en: reaction },
+          imageUrl: reactionImage,
+        });
+      }
+      onConversationMeta(fumo.id, reactionImage ? `${reply.text} [Photo]` : reply.text, reply.timestamp.getTime());
       setIsTyping(false);
     }, 1000);
   };
@@ -238,11 +301,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         timestamp: new Date(),
         imageUrl: url,
       };
-      setMessages(prev => {
-        const next = [...prev, msg];
-        syncRevealForAppend(next.length);
-        return next;
-      });
+      setMessages(prev => [...prev, msg]);
       void insertMessage(userId, { characterId: fumo.id, sender: 'user', imageUrl: url, text: '' });
       onConversationMeta(fumo.id, language === 'zh' ? '[图片]' : language === 'ja' ? '[画像]' : '[Photo]', msg.timestamp.getTime());
     };
@@ -265,11 +324,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     };
 
     const historyWithUser = [...messages, userMsg];
-    setMessages(prev => {
-      const next = [...prev, userMsg];
-      syncRevealForAppend(next.length);
-      return next;
-    });
+    setMessages(prev => [...prev, userMsg]);
     void insertMessage(userId, { characterId: fumo.id, sender: 'user', text: input });
     onConversationMeta(fumo.id, userMsg.text, userMsg.timestamp.getTime());
     setInput('');
@@ -285,20 +340,37 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         // Add a small delay between split messages
         if (i > 0) await new Promise(resolve => setTimeout(resolve, 800));
         
+        let partImage: string | undefined;
+        if (i === 0 && shouldAttachAiImage()) {
+          const img = await generateFumoSceneImage(fumo.id, language, parts[i]);
+          if (img) partImage = img;
+        }
         const fumoMsg: Message = {
           id: `tmp-${Date.now() + i + 1}`,
           characterId: fumo.id,
           sender: 'fumo',
           text: parts[i],
           timestamp: new Date(),
+          imageUrl: partImage,
         };
-        setMessages(prev => {
-          const next = [...prev, fumoMsg];
-          syncRevealForAppend(next.length);
-          return next;
+        setMessages(prev => [...prev, fumoMsg]);
+        void insertMessage(userId, {
+          characterId: fumo.id,
+          sender: 'fumo',
+          text: parts[i],
+          imageUrl: partImage,
         });
-        void insertMessage(userId, { characterId: fumo.id, sender: 'fumo', text: parts[i] });
-        onConversationMeta(fumo.id, fumoMsg.text, fumoMsg.timestamp.getTime());
+        if (partImage) {
+          void createCharacterMoment(fumo.id, {
+            content: { zh: parts[i], ja: parts[i], en: parts[i] },
+            imageUrl: partImage,
+          });
+        }
+        onConversationMeta(
+          fumo.id,
+          partImage ? `${fumoMsg.text} [Photo]` : fumoMsg.text,
+          fumoMsg.timestamp.getTime()
+        );
       }
     } catch (error) {
       console.error(error);
@@ -310,24 +382,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const handleGenerateImage = async () => {
     setIsTyping(true);
     try {
-      const response = await genAI.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: {
-          parts: [
-            {
-              text: `A highly detailed 3D rendering of ${fumo.name[language]} (a Touhou Project Fumo plush doll) in a cute daily life scene in Gensokyo. Soft plush texture, visible velvet and wool fabrics, handcrafted quality, signature Fumo design with large head and short limbs, round black dot eyes, adorable and fluffy, photorealistic style, cute and comforting. Scene: ${fumo.id === 'reimu' ? 'at the Hakurei Shrine with a donation box' : fumo.id === 'marisa' ? 'in the Forest of Magic with mushrooms' : 'in the Scarlet Devil Mansion kitchen'}.`,
-            },
-          ],
-        },
-      });
-
-      let imageUrl = '';
-      for (const part of response.candidates?.[0]?.content.parts || []) {
-        if (part.inlineData) {
-          imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-          break;
-        }
-      }
+      const sceneText =
+        language === 'zh'
+          ? `${fumo.name[language]}今天在幻想乡随手拍的一张治愈小场景。`
+          : language === 'ja'
+            ? `${fumo.name[language]}が幻想郷で撮った癒しのワンシーン。`
+            : `A cozy healing snapshot ${fumo.name[language]} took in Gensokyo.`;
+      const imageUrl = await generateFumoSceneImage(fumo.id, language, sceneText);
 
       if (imageUrl) {
         const fumoMsg: Message = {
@@ -338,16 +399,16 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           timestamp: new Date(),
           imageUrl,
         };
-        setMessages(prev => {
-          const next = [...prev, fumoMsg];
-          syncRevealForAppend(next.length);
-          return next;
-        });
+        setMessages(prev => [...prev, fumoMsg]);
         void insertMessage(userId, {
           characterId: fumo.id,
           sender: 'fumo',
           text: fumoMsg.text,
           imageUrl: imageUrl,
+        });
+        void createCharacterMoment(fumo.id, {
+          content: { zh: fumoMsg.text, ja: fumoMsg.text, en: fumoMsg.text },
+          imageUrl,
         });
         onConversationMeta(fumo.id, fumoMsg.text, fumoMsg.timestamp.getTime());
       }
@@ -355,6 +416,35 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       console.error("Image generation failed:", error);
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current != null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const openUserMessageMenu = (msg: Message) => {
+    if (msg.sender !== 'user') return;
+    setMenuMessage(msg);
+  };
+
+  const handleUserMessageAction = async (mode: 'recall' | 'delete') => {
+    if (!fumo || !menuMessage || menuMessage.sender !== 'user') return;
+    const target = menuMessage;
+    setMenuMessage(null);
+    setMessages(prev => prev.filter(m => m.id !== target.id));
+    try {
+      await deleteUserMessage(userId, target.id, fumo.id);
+    } catch (e) {
+      // 若云端删除失败，回滚可见性，避免前后端状态不一致
+      setMessages(prev => {
+        if (prev.some(m => m.id === target.id)) return prev;
+        return [...prev, target].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      });
+      console.error(`${mode} message failed`, e);
     }
   };
 
@@ -445,11 +535,56 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             </motion.div>
           </motion.div>
         )}
+
+        {menuMessage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end"
+            onClick={() => setMenuMessage(null)}
+          >
+            <motion.div
+              initial={{ y: 260 }}
+              animate={{ y: 0 }}
+              exit={{ y: 260 }}
+              className="w-full bg-cream-card rounded-t-3xl p-5 stitched-border border-b-0"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="text-xs font-bold opacity-50 mb-3">
+                {language === 'zh' ? '消息操作' : language === 'ja' ? 'メッセージ操作' : 'Message Actions'}
+              </div>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => void handleUserMessageAction('recall')}
+                  className="w-full p-3 rounded-2xl bg-white stitched-border text-sm font-bold hover:bg-cream-accent/10 transition-colors"
+                >
+                  {language === 'zh' ? '撤回消息' : language === 'ja' ? '送信取り消し' : 'Recall Message'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleUserMessageAction('delete')}
+                  className="w-full p-3 rounded-2xl bg-rose-50 text-rose-600 stitched-border text-sm font-bold hover:bg-rose-100 transition-colors"
+                >
+                  {language === 'zh' ? '删除消息' : language === 'ja' ? 'メッセージ削除' : 'Delete Message'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMenuMessage(null)}
+                  className="w-full p-2 text-xs font-bold opacity-50 hover:opacity-100"
+                >
+                  {language === 'zh' ? '取消' : language === 'ja' ? 'キャンセル' : 'Cancel'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Header */}
       <header className="bg-cream-card/80 backdrop-blur-md p-4 flex items-center gap-3 border-b-2 border-cream-border border-dashed z-10">
-        <button onClick={() => navigate('/')} className="p-2 hover:bg-cream-accent/20 rounded-full transition-colors">
+        <button onClick={goMessages} className="p-2 hover:bg-cream-accent/20 rounded-full transition-colors">
           <ChevronLeft className="w-6 h-6" />
         </button>
         <div className="flex items-center gap-3">
@@ -467,15 +602,24 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       {/* Chat Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
         <AnimatePresence initial={false}>
-          {visibleMessages.map((msg) => (
+          {messages.map(msg => (
             <motion.div
               key={msg.id}
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              initial={
+                messageEnterAnimate(msg) ? { opacity: 0, y: 10, scale: 0.95 } : false
+              }
               animate={{ opacity: 1, y: 0, scale: 1 }}
               className={cn(
                 "flex gap-2 max-w-[85%]",
                 msg.sender === 'user' ? "ml-auto flex-row-reverse" : "mr-auto"
               )}
+              onTouchStart={() => {
+                if (msg.sender !== 'user') return;
+                clearLongPress();
+                longPressTimerRef.current = window.setTimeout(() => openUserMessageMenu(msg), 420);
+              }}
+              onTouchEnd={clearLongPress}
+              onTouchCancel={clearLongPress}
             >
               {msg.sender === 'fumo' && (
                 <img src={fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white self-end mb-1 fumo-shadow object-cover" alt="" />
@@ -505,6 +649,15 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                   </button>
                 )}
               </div>
+              {msg.sender === 'user' && (
+                <button
+                  type="button"
+                  onClick={() => openUserMessageMenu(msg)}
+                  className="self-end mb-1 p-1 opacity-40 hover:opacity-100 transition-opacity"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
