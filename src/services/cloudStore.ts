@@ -67,9 +67,15 @@ function randomLikeBase() {
   return 12 + Math.floor(Math.random() * 37);
 }
 
-/** 动态正文去重键（以中文为准，与种子/用户发帖习惯一致）。 */
+/**
+ * 动态去重键：同一「作者」下相同中文只保留一条（避免不同角色/用户因撞文案被错误合并导致配图丢失）。
+ * - 角色：character_id + text_zh
+ * - 用户：user_id + text_zh
+ */
 function momentContentDedupeKey(row: MomentRow): string {
-  return row.text_zh.trim();
+  const zh = row.text_zh.trim();
+  if (row.author_type === 'user') return `u:${row.user_id ?? ''}|${zh}`;
+  return `c:${row.character_id ?? ''}|${zh}`;
 }
 
 /** 去重打分：用户动态优先；有图优先；非 Unsplash 等占位图优先；较新略优先（小数 tie-break）。 */
@@ -727,13 +733,13 @@ export async function createCharacterMoment(
 ) {
   if (!isSupabaseReady()) return;
   // 去重：避免同一角色同文案同图片反复写入导致 Moments 重复。
+  // 仅按角色+正文去重：避免同文案换图后插入第二条，feed 去重时丢掉新图。
   const { data: existed } = await supabase
     .from('moments')
     .select('id')
     .eq('author_type', 'character')
     .eq('character_id', characterId)
     .eq('text_zh', payload.content.zh)
-    .eq('image_url', payload.imageUrl ?? null)
     .limit(1);
   if ((existed ?? []).length > 0) return;
 
@@ -832,7 +838,13 @@ export async function refreshCharacterMomentImagesByAi(limit = 3) {
   const rows = (data ?? []) as MomentRow[];
   const candidates = rows
     .filter(r => r.character_id)
-    .filter(r => !r.image_url || r.image_url.includes('unsplash'))
+    .filter(r => {
+      const u = r.image_url?.trim() ?? '';
+      if (!u) return true;
+      // 已换成本地种子图或 Storage 的，不要再走 AI 覆盖。
+      if (u.startsWith('/moments/') || u.includes('/storage/v1/object')) return false;
+      return u.includes('unsplash');
+    })
     .slice(0, Math.max(1, limit));
 
   let changed = 0;
