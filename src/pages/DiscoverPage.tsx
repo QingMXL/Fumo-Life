@@ -7,7 +7,7 @@ import {
   type MomentComment,
   type UserProfile,
 } from '@/types';
-import { Heart, MessageCircle, Share2, Plus, Camera, X, Trash2 } from 'lucide-react';
+import { Heart, MessageCircle, Download, Plus, Camera, X, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
@@ -18,6 +18,7 @@ import {
   createCharacterComment,
   createUserComment,
   createUserMoment,
+  deleteUserComment,
   deleteUserMoment,
   ensureSeedCharacterMoments,
   fetchMomentsFeed,
@@ -37,6 +38,40 @@ function shuffle<T>(arr: T[]): T[] {
     [out[i], out[j]] = [out[j]!, out[i]!];
   }
   return out;
+}
+
+async function downloadMomentImage(url: string, filenameBase: string) {
+  const ext = url.startsWith('data:image/')
+    ? (url.match(/^data:image\/(\w+)/)?.[1] ?? 'png')
+    : (() => {
+        try {
+          const u = new URL(url, window.location.href);
+          const m = u.pathname.match(/\.([a-zA-Z0-9]+)$/);
+          return m?.[1]?.toLowerCase() ?? 'png';
+        } catch {
+          return 'png';
+        }
+      })();
+  const safe = filenameBase.replace(/[^\w.-]+/g, '_').slice(0, 80) || 'moment';
+  const filename = `${safe}.${ext}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.rel = 'noopener';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.click();
+  }
 }
 
 const FIXED_USER_NAME = '神社客';
@@ -174,6 +209,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     const comment: MomentComment = {
       id: newCommentId(),
       authorType: 'user',
+      userId,
       userDisplayName: FIXED_USER_NAME,
       userAvatarUrl: userProfile.avatarUrl,
       createdAt: new Date(),
@@ -247,6 +283,29 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     await reloadFeed();
   };
 
+  const handleDeleteComment = async (momentId: string, comment: MomentComment) => {
+    if (comment.authorType !== 'user' || comment.userId !== userId) return;
+    const ok = window.confirm(
+      language === 'zh'
+        ? '删除这条评论？'
+        : language === 'ja'
+          ? 'このコメントを削除しますか？'
+          : 'Delete this comment?'
+    );
+    if (!ok) return;
+    setMoments(prev =>
+      prev.map(m =>
+        m.id === momentId ? { ...m, comments: m.comments.filter(c => c.id !== comment.id) } : m
+      )
+    );
+    try {
+      await deleteUserComment(userId, comment.id);
+    } catch (e) {
+      console.error('deleteUserComment failed:', e);
+      await reloadFeed();
+    }
+  };
+
   const handleDeleteMoment = async (moment: Moment) => {
     if (moment.authorType !== 'user') return;
     const ok = window.confirm(
@@ -272,16 +331,17 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     return t > feedHydrateAt;
   };
 
-  const renderComment = (comment: MomentComment) => {
+  const renderComment = (momentId: string, comment: MomentComment) => {
     const enter = commentShouldEnterAnimate(comment);
     const boxClass =
-      'flex gap-2 text-xs bg-cream-accent/10 p-2 rounded-xl border border-cream-border border-dashed';
+      'flex gap-2 text-xs bg-cream-accent/10 p-2 rounded-xl border border-cream-border border-dashed items-start justify-between';
+    const canDeleteOwn = comment.authorType === 'user' && comment.userId === userId;
 
     if (comment.authorType === 'user') {
       const name = comment.userDisplayName ?? FIXED_USER_NAME;
       const avatar = comment.userAvatarUrl ?? userProfile.avatarUrl;
       const inner = (
-        <>
+        <div className="flex gap-2 min-w-0 flex-1">
           <img
             src={avatar}
             className="w-7 h-7 rounded-full border border-white shrink-0 object-cover"
@@ -292,8 +352,19 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
             <span className="font-bold mr-1">{name}</span>
             <span className="opacity-70">{comment.text[language]}</span>
           </div>
-        </>
+        </div>
       );
+      const del =
+        canDeleteOwn ? (
+          <button
+            type="button"
+            onClick={() => void handleDeleteComment(momentId, comment)}
+            className="shrink-0 p-1 rounded-lg text-rose-500/70 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+            title={language === 'zh' ? '删除评论' : language === 'ja' ? 'コメントを削除' : 'Delete comment'}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        ) : null;
       return enter ? (
         <motion.div
           key={comment.id}
@@ -302,16 +373,18 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
           className={boxClass}
         >
           {inner}
+          {del}
         </motion.div>
       ) : (
         <div key={comment.id} className={boxClass}>
           {inner}
+          {del}
         </div>
       );
     }
     const commenter = CHARACTERS.find(c => c.id === comment.characterId);
     const inner = (
-      <>
+      <div className="flex gap-2 min-w-0 flex-1">
         <img
           src={commenter?.avatar}
           className="w-7 h-7 rounded-full border border-white shrink-0 object-cover"
@@ -322,7 +395,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
           <span className="font-bold mr-1">{commenter?.name[language]}:</span>
           <span className="opacity-70">{comment.text[language]}</span>
         </div>
-      </>
+      </div>
     );
     return enter ? (
       <motion.div
@@ -494,13 +567,33 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
                     <span className="text-xs font-bold">{moment.comments.length}</span>
                   </div>
                 </div>
-                <button type="button" className="opacity-40 hover:opacity-100">
-                  <Share2 className="w-5 h-5" />
-                </button>
+                {moment.imageUrl ? (
+                  <button
+                    type="button"
+                    className="opacity-40 hover:opacity-100 p-1 rounded-lg hover:bg-cream-accent/20 transition-colors shrink-0"
+                    title={
+                      language === 'zh'
+                        ? '下载图片'
+                        : language === 'ja'
+                          ? '画像を保存'
+                          : 'Download image'
+                    }
+                    onClick={() =>
+                      void downloadMomentImage(
+                        moment.imageUrl!,
+                        `fumo-moment-${moment.id.slice(0, 12)}`
+                      )
+                    }
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
+                ) : null}
               </div>
 
               {moment.comments.length > 0 && (
-                <div className="px-4 pb-4 space-y-2">{moment.comments.map(renderComment)}</div>
+                <div className="px-4 pb-4 space-y-2">
+                  {moment.comments.map(c => renderComment(moment.id, c))}
+                </div>
               )}
 
               <div className="px-4 pb-4 flex gap-2">

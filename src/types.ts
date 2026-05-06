@@ -9,6 +9,8 @@ export interface UserProfile {
 export interface MomentComment {
   id: string;
   authorType: 'user' | 'character';
+  /** When authorType === 'user'; from DB, for delete-own-comment. */
+  userId?: string;
   /** When authorType === 'character' */
   characterId?: string;
   /** Snapshot when a user comments (display name may differ per language later) */

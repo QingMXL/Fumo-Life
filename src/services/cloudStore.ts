@@ -67,27 +67,45 @@ function randomLikeBase() {
   return 12 + Math.floor(Math.random() * 37);
 }
 
-/** 角色动态指纹：去重同一角色重复插入的相同内容。 */
-function characterMomentFingerprint(row: MomentRow): string {
-  return `${row.character_id ?? ''}|${row.text_zh}|${row.image_url ?? ''}`;
+/** 动态正文去重键（以中文为准，与种子/用户发帖习惯一致）。 */
+function momentContentDedupeKey(row: MomentRow): string {
+  return row.text_zh.trim();
 }
 
-/** 同指纹多条动态合并展示时，把子表里的 moment_id 归一到 canonical id，避免点赞丢失。 */
+/** 去重打分：用户动态优先；有图优先；非 Unsplash 等占位图优先；较新略优先（小数 tie-break）。 */
+function momentRowDedupePriority(row: MomentRow): number {
+  const img = row.image_url?.trim() ?? '';
+  const stock = /images\.unsplash\.com|picsum\.photos|placehold|placeholder\.com/i.test(img);
+  const t = new Date(row.created_at).getTime();
+  let p = 0;
+  if (row.author_type === 'user') p += 4_000_000_000;
+  if (img) p += 2_000_000_000;
+  if (img && !stock) p += 1_000_000_000;
+  return p + t / 86_400_000;
+}
+
+/** 合并「正文相同」的动态，只保留一条展示。 */
+function dedupeMomentRowsByContent(rows: MomentRow[]): MomentRow[] {
+  const best = new Map<string, MomentRow>();
+  for (const r of rows) {
+    const k = momentContentDedupeKey(r);
+    const cur = best.get(k);
+    if (!cur || momentRowDedupePriority(r) > momentRowDedupePriority(cur)) best.set(k, r);
+  }
+  return [...best.values()].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+}
+
+/** 合并展示后，把重复行的 id 映射到 canonical id，评论/赞归并到保留条上。 */
 function buildMomentIdToCanonical(allRaw: MomentRow[], canonicalRows: MomentRow[]): Map<string, string> {
-  const fpToCanonical = new Map<string, string>();
+  const winByKey = new Map<string, string>();
   for (const r of canonicalRows) {
-    if (r.author_type === 'character') {
-      fpToCanonical.set(characterMomentFingerprint(r), r.id);
-    }
+    winByKey.set(momentContentDedupeKey(r), r.id);
   }
   const out = new Map<string, string>();
   for (const r of allRaw) {
-    if (r.author_type === 'character') {
-      const canon = fpToCanonical.get(characterMomentFingerprint(r)) ?? r.id;
-      out.set(r.id, canon);
-    } else {
-      out.set(r.id, r.id);
-    }
+    out.set(r.id, winByKey.get(momentContentDedupeKey(r)) ?? r.id);
   }
   return out;
 }
@@ -169,20 +187,6 @@ async function insertCharacterLikesIgnoreDup(rows: Array<{ moment_id: string; ch
         console.warn('[cloudStore] character_likes insert:', error.message);
       }
     })
-  );
-}
-
-function dedupeCharacterMomentRows(rows: MomentRow[]): MomentRow[] {
-  const users = rows.filter(r => r.author_type === 'user');
-  const chars = rows.filter(r => r.author_type === 'character');
-  const best = new Map<string, MomentRow>();
-  for (const r of chars) {
-    const key = characterMomentFingerprint(r);
-    const cur = best.get(key);
-    if (!cur || new Date(r.created_at).getTime() > new Date(cur.created_at).getTime()) best.set(key, r);
-  }
-  return [...users, ...best.values()].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 }
 
@@ -437,6 +441,7 @@ function momentFromRows(
       arr.push({
         id: c.id,
         authorType: 'user',
+        userId: c.user_id ?? undefined,
         userDisplayName: u?.username ?? '神社客',
         userAvatarUrl: u?.avatar_url ?? '/avatars/user.png',
         createdAt,
@@ -492,9 +497,10 @@ function momentFromRows(
   });
 }
 
-function seedFingerprint(m: Moment): string {
+/** 角色种子动态去重键（不含图片）：换图时更新库内 image_url，不重复插入。 */
+function seedIdentityKey(m: Moment): string {
   if (m.authorType !== 'character') return '';
-  return `${m.characterId ?? ''}|${m.content.zh}|${m.imageUrl ?? ''}`;
+  return `${m.characterId ?? ''}|${m.content.zh}`;
 }
 
 export async function ensureSeedCharacterMoments(seed: Moment[]) {
@@ -504,14 +510,15 @@ export async function ensureSeedCharacterMoments(seed: Moment[]) {
     .select('id, character_id, text_zh, image_url')
     .eq('author_type', 'character');
   if (error) throw error;
-  const idByFp = new Map<string, string>();
+  const byCharacterZh = new Map<string, { id: string; image_url: string | null }>();
   for (const r of (existing ?? []) as Array<{
     id: string;
     character_id: string | null;
     text_zh: string;
     image_url: string | null;
   }>) {
-    idByFp.set(`${r.character_id ?? ''}|${r.text_zh}|${r.image_url ?? ''}`, r.id);
+    const k = `${r.character_id ?? ''}|${r.text_zh}`;
+    if (!byCharacterZh.has(k)) byCharacterZh.set(k, { id: r.id, image_url: r.image_url });
   }
 
   const characterSeeds = seed.filter(m => m.authorType === 'character');
@@ -526,21 +533,37 @@ export async function ensureSeedCharacterMoments(seed: Moment[]) {
     created_at: string;
   }> = [];
   const meta: Moment[] = [];
+  const imagePatches: Array<{ id: string; image_url: string | null }> = [];
+
   for (const m of characterSeeds) {
-    const fp = seedFingerprint(m);
-    if (!fp || idByFp.has(fp)) continue;
+    const k = seedIdentityKey(m);
+    if (!k) continue;
+    const row = byCharacterZh.get(k);
+    const nextImg = m.imageUrl ?? null;
+    if (row) {
+      if ((row.image_url ?? '') !== (nextImg ?? '')) {
+        imagePatches.push({ id: row.id, image_url: nextImg });
+      }
+      continue;
+    }
     rowsToInsert.push({
       author_type: 'character',
       character_id: m.characterId ?? null,
       text_zh: m.content.zh,
       text_ja: m.content.ja,
       text_en: m.content.en,
-      image_url: m.imageUrl ?? null,
+      image_url: nextImg,
       base_likes: Math.max(0, Math.floor(m.likes ?? 0)),
       created_at: m.timestamp.toISOString(),
     });
     meta.push(m);
   }
+
+  for (const p of imagePatches) {
+    const { error: uErr } = await supabase.from('moments').update({ image_url: p.image_url }).eq('id', p.id);
+    if (uErr) throw uErr;
+  }
+
   if (rowsToInsert.length === 0) return;
 
   let inserted: Array<{ id: string }> | null = null;
@@ -553,11 +576,6 @@ export async function ensureSeedCharacterMoments(seed: Moment[]) {
   }
   if (insertError) throw insertError;
   const idList = (inserted ?? []) as Array<{ id: string }>;
-
-  for (let i = 0; i < idList.length; i++) {
-    const fp = seedFingerprint(meta[i]!);
-    if (fp) idByFp.set(fp, idList[i]!.id);
-  }
 
   const comments: Array<{
     moment_id: string;
@@ -616,7 +634,7 @@ export async function fetchMomentsFeed(userId: string) {
   }
   if (mErr) throw mErr;
   const allRaw = (momentsRaw ?? []) as MomentRow[];
-  let momentRows = dedupeCharacterMomentRows(allRaw);
+  const momentRows = dedupeMomentRowsByContent(allRaw);
   const idCanon = buildMomentIdToCanonical(allRaw, momentRows);
 
   if (momentRows.length > 0) await ensureNpcCrossLikesForFeed(momentRows, allRaw, idCanon);
@@ -889,6 +907,18 @@ export async function createUserComment(
     text_ja: text.ja,
     text_en: text.en,
   });
+  if (error) throw error;
+}
+
+/** 仅删除当前用户自己发表的评论。 */
+export async function deleteUserComment(userId: string, commentId: string) {
+  if (!isSupabaseReady()) return;
+  const { error } = await supabase
+    .from('comments')
+    .delete()
+    .eq('id', commentId)
+    .eq('user_id', userId)
+    .eq('author_type', 'user');
   if (error) throw error;
 }
 

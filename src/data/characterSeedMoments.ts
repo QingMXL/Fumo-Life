@@ -11,7 +11,7 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '今日も神社は暇ね。誰かお賽銭を入れに来てくれないかしら…（座布団に倒れ込む）',
       en: 'The shrine is quiet again today. I wish someone would come and donate... (*collapses on cushion*)',
     },
-    imageUrl: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?q=80&w=800&auto=format&fit=crop',
+    imageUrl: '/moments/reimu-shrine-moment.png',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
     likes: 24,
     comments: [
@@ -56,7 +56,7 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '魔法の森でキラキラしたキノコを見つけたぜ！これはきっとレアな素材だぜ！',
       en: 'Found a sparkly mushroom in the Forest of Magic! This must be a rare ingredient DAZE!',
     },
-    imageUrl: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?q=80&w=800&auto=format&fit=crop',
+    imageUrl: '/moments/marisa-magic-mushroom.png',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5),
     likes: 42,
     comments: [
@@ -390,7 +390,7 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '湖でひんやり石を拾った。早苗に文鎮って渡したら冷凍団子みたいって。',
       en: 'Found a chilly pebble in the lake—gave Sanae as a paperweight, she said it’s like frozen dango.',
     },
-    imageUrl: 'https://images.unsplash.com/photo-1439066615861-d1af74d74000?q=80&w=800',
+    imageUrl: '/moments/suwako-lake-moment.png',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 11),
     likes: 55,
     comments: [
