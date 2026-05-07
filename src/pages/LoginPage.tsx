@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { type Language } from '@/types';
+import { cn } from '@/lib/utils';
 import { loginWithUsername, registerWithUsername } from '@/services/auth';
 
 interface LoginPageProps {
@@ -72,28 +73,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen px-4 pt-10 pb-6 max-w-md mx-auto">
-      <div className="flex justify-end gap-2 mb-6">
-        {(['zh', 'ja', 'en'] as const).map(lang => (
-          <button
-            key={lang}
-            type="button"
-            onClick={() => onLanguageChange(lang)}
-            className={`px-2 py-1 text-xs rounded-full stitched-border ${
-              language === lang ? 'bg-cream-text text-white' : 'bg-white'
-            }`}
-          >
-            {lang.toUpperCase()}
-          </button>
-        ))}
-      </div>
+    <div className="mx-auto min-h-screen max-w-md pb-8">
+      <header className="fumo-header-sky px-4 pb-16 pt-8 text-center">
+        <h1 className="fumo-title-app text-2xl font-black">Fumo² Life</h1>
+        <p className="mx-auto mt-2 max-w-[18rem] text-xs font-bold leading-relaxed text-white/85">
+          {labels.subtitle}
+        </p>
+        <div className="mt-4 flex justify-center gap-2">
+          {(['zh', 'ja', 'en'] as const).map(lang => (
+            <button
+              key={lang}
+              type="button"
+              onClick={() => onLanguageChange(lang)}
+              className={cn(
+                'rounded-full border-2 border-white/50 px-3 py-1 text-[10px] font-extrabold backdrop-blur-sm transition-colors',
+                language === lang ? 'bg-white/35 text-white' : 'bg-white/15 text-white/90'
+              )}
+            >
+              {lang.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </header>
 
-      <div className="stitched-card">
-        <h1 className="text-2xl font-black">Fumo² Life</h1>
-        <p className="text-sm opacity-70 mt-2">{labels.subtitle}</p>
-        <h2 className="font-bold mt-4">{labels.title}</h2>
-
-        <div className="mt-4 space-y-3">
+      <div className="fumo-page-sheet -mt-10 mx-4 px-4 pb-6 pt-6">
+      <div className="stitched-card border-cream-border/90">
+        <h2 className="text-lg font-black text-cream-text">{labels.title}</h2>
+        <div className="mt-5 space-y-3">
           <input
             value={username}
             onChange={e => setUsername(e.target.value)}
@@ -116,7 +122,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           type="button"
           onClick={submit}
           disabled={loading}
-          className="w-full mt-4 bg-cream-text text-white py-2.5 rounded-full font-bold disabled:opacity-60"
+          className="mt-5 w-full rounded-full bg-cream-text py-3 text-sm font-extrabold text-white shadow-md transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
         >
           {loading ? '...' : labels.submit}
         </button>
@@ -127,6 +133,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         >
           {labels.switch}
         </button>
+      </div>
       </div>
     </div>
   );

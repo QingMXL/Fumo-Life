@@ -6,6 +6,7 @@ import {
   type Moment,
   type MomentComment,
 } from '@/types';
+import { CHARACTER_SEED_TEXT_ONLY_KEYS } from '@/data/characterSeedMoments';
 import { generateFumoSceneImage } from './gemini';
 import { supabase, isSupabaseReady } from './supabase';
 
@@ -843,6 +844,8 @@ export async function refreshCharacterMomentImagesByAi(limit = 3) {
   const candidates = rows
     .filter(r => r.character_id)
     .filter(r => {
+      const key = `${r.character_id}|${r.text_zh}`;
+      if (CHARACTER_SEED_TEXT_ONLY_KEYS.has(key)) return false;
       const u = r.image_url?.trim() ?? '';
       if (!u) return true;
       // 已换成本地种子图或 Storage 的，不要再走 AI 覆盖。
@@ -909,21 +912,27 @@ export async function createCharacterComment(momentId: string, c: MomentComment)
   if (error) throw error;
 }
 
+/** @returns 新评论在库里的 id，便于前端替换乐观更新的临时 id，删除时才删得掉。 */
 export async function createUserComment(
   userId: string,
   momentId: string,
   text: { zh: string; ja: string; en: string }
-) {
-  if (!isSupabaseReady()) return;
-  const { error } = await supabase.from('comments').insert({
-    moment_id: momentId,
-    author_type: 'user',
-    user_id: userId,
-    text_zh: text.zh,
-    text_ja: text.ja,
-    text_en: text.en,
-  });
+): Promise<string | null> {
+  if (!isSupabaseReady()) return null;
+  const { data, error } = await supabase
+    .from('comments')
+    .insert({
+      moment_id: momentId,
+      author_type: 'user',
+      user_id: userId,
+      text_zh: text.zh,
+      text_ja: text.ja,
+      text_en: text.en,
+    })
+    .select('id')
+    .single();
   if (error) throw error;
+  return (data as { id: string } | null)?.id ?? null;
 }
 
 /** 仅删除当前用户自己发表的评论。 */

@@ -73,7 +73,15 @@ export const MePage: React.FC<MePageProps> = ({
   };
 
   return (
-    <div className="pb-24 pt-4 px-4 max-w-md mx-auto relative min-h-screen">
+    <div className="max-w-md mx-auto min-h-screen pb-24">
+      <header className="fumo-header-sky px-4 pb-12 pt-5 text-center">
+        <h1 className="fumo-title-app text-xl font-black tracking-tight">
+          {language === 'zh' ? '我的' : language === 'ja' ? '自分' : 'Me'}
+        </h1>
+        <p className="mt-1 text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/80">Profile</p>
+      </header>
+
+      <div className="fumo-page-sheet -mt-8 px-4 pb-6 pt-6">
       <header className="mb-8 flex flex-col items-center text-center">
         <div className="relative mb-4">
           <div className="w-24 h-24 rounded-full bg-cream-accent/20 stitched-border flex items-center justify-center overflow-hidden">
@@ -332,6 +340,7 @@ export const MePage: React.FC<MePageProps> = ({
 
       <div className="mt-8 text-center">
         <p className="text-[10px] font-bold opacity-20 uppercase tracking-[0.3em]">Fumo² Life v2.0.0</p>
+      </div>
       </div>
     </div>
   );

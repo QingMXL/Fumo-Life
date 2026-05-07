@@ -6,7 +6,10 @@ import { type Moment } from '@/types';
  * 打开「发现」时会自动把 Supabase 里同文案的行的 image_url 写成该路径，无需在 SQL Editor 里逐条改。
  * 当前 id 列表：seed-reimu-1, seed-marisa-1, seed-sakuya-1, seed-patchouli-1, seed-remilia-1,
  * seed-yuyuko-1, seed-youmu-1, seed-kaguya-1, seed-tewi-1, seed-reisen-1, seed-sanae-1, seed-suwako-1, seed-koishi-1
+ * 纯文字（无配图）：seed-kaguya-1, seed-reisen-1, seed-koishi-1
  */
+const CHARACTER_SEED_TEXT_ONLY_IDS = new Set(['seed-kaguya-1', 'seed-reisen-1', 'seed-koishi-1']);
+
 const RAW_CHARACTER_SEED_MOMENTS: Moment[] = [
   {
     id: 'seed-reimu-1',
@@ -438,6 +441,16 @@ const RAW_CHARACTER_SEED_MOMENTS: Moment[] = [
   },
 ];
 
-export const CHARACTER_SEED_MOMENTS: Moment[] = RAW_CHARACTER_SEED_MOMENTS.map(m =>
-  m.authorType === 'character' ? { ...m, imageUrl: `/moments/${m.id}.png` } : m
+/** 与 cloudStore.seedIdentityKey 一致：`characterId|text_zh`，用于跳过 AI 补图。 */
+export const CHARACTER_SEED_TEXT_ONLY_KEYS: ReadonlySet<string> = new Set(
+  RAW_CHARACTER_SEED_MOMENTS.filter(
+    (m): m is Moment & { authorType: 'character'; characterId: string } =>
+      m.authorType === 'character' && CHARACTER_SEED_TEXT_ONLY_IDS.has(m.id)
+  ).map(m => `${m.characterId}|${m.content.zh}`)
 );
+
+export const CHARACTER_SEED_MOMENTS: Moment[] = RAW_CHARACTER_SEED_MOMENTS.map(m => {
+  if (m.authorType !== 'character') return m;
+  if (CHARACTER_SEED_TEXT_ONLY_IDS.has(m.id)) return { ...m };
+  return { ...m, imageUrl: `/moments/${m.id}.png` };
+});

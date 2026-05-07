@@ -18,18 +18,18 @@ interface BottomNavProps {
 
 export const BottomNav: React.FC<BottomNavProps> = ({ language, unreadMessagesCount, unreadDiscoverCount }) => {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-cream-card border-t-2 border-cream-border border-dashed px-4 pb-6 pt-2 flex justify-around items-center z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+    <nav className="bottom-nav-kawaii fixed bottom-0 left-0 right-0 z-50 mx-auto flex max-w-md justify-around items-center">
       {tabs.map((tab) => (
         <NavLink
           key={tab.id}
           to={tab.path}
           className={({ isActive }) => cn(
-            "flex flex-col items-center gap-1 transition-all duration-300 px-3 py-1 rounded-2xl",
-            isActive ? "bg-cream-accent/30 scale-110" : "opacity-60 grayscale"
+            "flex flex-col items-center gap-1 transition-all duration-300 px-3 py-1.5 min-w-[4.25rem]",
+            isActive ? "nav-tab-active scale-105" : "opacity-70 hover:opacity-100"
           )}
         >
           <div className="relative">
-            <tab.icon className="w-6 h-6 text-cream-text" />
+            <tab.icon className="w-6 h-6 text-cream-text" strokeWidth={2.35} />
             {tab.id === 'messages' && unreadMessagesCount > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-[#FF4D4D] text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white fumo-shadow">
                 {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
@@ -41,7 +41,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ language, unreadMessagesCo
               </span>
             )}
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider">
+          <span className="text-[10px] font-extrabold tracking-wide text-cream-text">
             {tab.label[language]}
           </span>
         </NavLink>

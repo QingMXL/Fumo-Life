@@ -45,63 +45,65 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ language, characters
     });
 
   return (
-    <div className="pb-24 pt-4 px-4 max-w-md mx-auto">
-      <header className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-black tracking-tighter text-cream-text">Fumo² Life</h1>
-        <div className="flex items-center gap-2 bg-cream-accent/20 rounded-full px-3 py-1 stitched-border">
-          <Search className="w-4 h-4 opacity-60" />
-          <input 
-            type="text" 
-            placeholder={language === 'zh' ? '搜索...' : language === 'ja' ? '検索...' : 'Search...'}
-            className="bg-transparent border-none focus:ring-0 text-xs w-20"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+    <div className="max-w-md mx-auto min-h-screen pb-24">
+      <header className="fumo-header-sky px-4 pt-5 pb-16">
+        <div className="relative flex h-10 items-center justify-center">
+          <h1 className="fumo-title-app text-[1.35rem]">Fumo² Life</h1>
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 kawaii-search-pill">
+            <Search className="h-4 w-4 text-cream-text/70" strokeWidth={2.25} />
+            <input
+              type="text"
+              placeholder={language === 'zh' ? '搜索…' : language === 'ja' ? '検索…' : 'Search…'}
+              className="w-[4.5rem] border-none bg-transparent text-xs font-bold text-cream-text placeholder:text-cream-text/40 focus:ring-0"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
       </header>
 
-      <div className="space-y-4">
-        {filteredCharacters.map((fumo, index) => (
-          <motion.div
-            key={fumo.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.075, duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-          >
-                  <button
-                    type="button"
-                    onClick={() => goChat(fumo.id)}
-                    className="w-full text-left block stitched-card hover:translate-y-[-2px] transition-transform active:scale-95"
-          >
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <img
-                  src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar}
-                  alt={fumo.name[language]}
-                  className="w-16 h-16 rounded-full object-cover border-4 border-white fumo-shadow"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-baseline">
-                  <h3 className="font-bold text-lg truncate">{fumo.name[language]}</h3>
-                  <span className="text-xs opacity-40">{fumo.lastTime}</span>
+      <div className="fumo-page-sheet -mt-10 px-3 pt-5">
+        <div className="divide-y divide-cream-border/35 border-cream-border/25">
+          {filteredCharacters.map((fumo, index) => (
+            <motion.div
+              key={fumo.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.06, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <button
+                type="button"
+                onClick={() => goChat(fumo.id)}
+                className="flex w-full items-center gap-3 rounded-2xl border-2 border-transparent border-dashed py-4 pl-1 pr-2 text-left transition-all hover:border-cream-border/55 hover:bg-white/40 active:scale-[0.99]"
+              >
+                <div className="relative shrink-0">
+                  <img
+                    src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar}
+                    alt={fumo.name[language]}
+                    className="h-14 w-14 rounded-full border-[3px] border-white object-cover fumo-shadow"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
-                <div className="flex justify-between items-center">
-                  <p className="text-sm opacity-60 truncate">
-                    {fumo.lastMessage?.[language] ?? ''}
-                  </p>
-                  {fumo.unreadCount > 0 && (
-                    <div className="ml-2 bg-[#FF4D4D] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center fumo-shadow">
-                      {fumo.unreadCount}
-                    </div>
-                  )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="truncate text-base font-extrabold text-cream-text">{fumo.name[language]}</h3>
+                    <span className="shrink-0 text-[11px] font-bold text-cream-text/45">{fumo.lastTime}</span>
+                  </div>
+                  <div className="mt-0.5 flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-medium text-cream-text/65">
+                      {fumo.lastMessage?.[language] ?? ''}
+                    </p>
+                    {fumo.unreadCount > 0 && (
+                      <span className="shrink-0 rounded-full bg-[#ff5a5a] px-2 py-0.5 text-center text-[10px] font-black text-white fumo-shadow ring-2 ring-white">
+                        {fumo.unreadCount}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
-                  </button>
-          </motion.div>
-        ))}
+              </button>
+            </motion.div>
+          ))}
+        </div>
       </div>
     </div>
   );

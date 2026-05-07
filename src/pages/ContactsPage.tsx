@@ -33,15 +33,17 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ language, characters
   }, [onEnterRefreshOnline]);
 
   return (
-    <div className="pb-24 pt-4 px-4 max-w-md mx-auto">
-      <header className="mb-6">
-        <h1 className="text-2xl font-black tracking-tighter text-cream-text">
+    <div className="max-w-md mx-auto min-h-screen pb-24">
+      <header className="fumo-header-sky px-4 pb-14 pt-5">
+        <h1 className="fumo-title-app text-xl font-black tracking-tight">
           {language === 'zh' ? '通讯录' : language === 'ja' ? '連絡先' : 'Contacts'}
         </h1>
-        <p className="text-xs opacity-50 font-bold uppercase tracking-widest mt-1">Fumo Collection</p>
+        <p className="mt-1 text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/80">
+          Fumo Collection
+        </p>
       </header>
 
-      <div className="space-y-6">
+      <div className="fumo-page-sheet -mt-8 space-y-6 px-4 pb-4 pt-6">
         {affiliations.map(affiliation => (
           <section key={affiliation}>
             <h2 className="text-xs font-black opacity-30 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">

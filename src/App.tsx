@@ -290,7 +290,12 @@ export default function App() {
   }, [authUser, characters, language, updateConversationMeta]);
 
   if (authLoading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-cream-bg font-sans text-cream-text">
+        <div className="fumo-header-sky absolute inset-x-0 top-0 h-40" aria-hidden />
+        <p className="relative z-10 text-sm font-extrabold tracking-wide text-cream-text/70">Loading…</p>
+      </div>
+    );
   }
 
   if (!authUser) {

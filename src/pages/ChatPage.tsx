@@ -449,7 +449,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-screen bg-cream-bg max-w-md mx-auto relative overflow-hidden">
+    <div className="relative flex h-screen max-w-md mx-auto flex-col overflow-hidden bg-cream-bg">
       {/* Modals */}
       <AnimatePresence>
         {showGifts && (
@@ -503,11 +503,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                   <h3 className="font-bold text-xl">{fumo.name[language]}</h3>
                   <p className="text-xs opacity-60 mt-1">{fumo.description[language]}</p>
                 </div>
-                <div className="w-full bg-cream-accent/20 h-4 rounded-full overflow-hidden stitched-border border-dashed">
-                  <div 
-                    className="h-full bg-cream-text transition-all duration-1000" 
-                    style={{ width: `${(liveFumo.bondLevel / 10) * 100}%` }}
-                  />
+                <div className="bond-bar-kawaii h-4">
+                  <div className="bond-bar-kawaii-fill" style={{ width: `${(liveFumo.bondLevel / 10) * 100}%` }} />
                 </div>
                 <span className="text-xs font-black">BOND LEVEL: {liveFumo.bondLevel} / 10</span>
                 
@@ -582,25 +579,66 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Header */}
-      <header className="bg-cream-card/80 backdrop-blur-md p-4 flex items-center gap-3 border-b-2 border-cream-border border-dashed z-10">
-        <button onClick={goMessages} className="p-2 hover:bg-cream-accent/20 rounded-full transition-colors">
-          <ChevronLeft className="w-6 h-6" />
-        </button>
-        <div className="flex items-center gap-3">
-          <img src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white fumo-shadow" alt="" />
-          <div>
-            <h2 className="font-bold leading-tight">{fumo.name[language]}</h2>
-            <div className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-green-400 rounded-full" />
-              <span className="text-[10px] opacity-60 font-bold">Bond Level: {liveFumo.bondLevel} / 10</span>
+      <div className="fumo-header-sky relative z-10 shrink-0 px-4 pb-7 pt-3">
+        <div className="relative flex h-11 items-center justify-between">
+          <button type="button" onClick={goMessages} className="kawaii-back-btn z-10 p-2 transition-transform active:scale-95">
+            <ChevronLeft className="h-6 w-6" strokeWidth={2.35} />
+          </button>
+          <h1 className="fumo-title-app pointer-events-none absolute inset-x-0 text-center text-[0.95rem] font-black">
+            Fumo² Life
+          </h1>
+          <span className="z-10 flex h-10 w-10 items-center justify-center text-lg select-none opacity-90" aria-hidden>
+            🌸
+          </span>
+        </div>
+      </div>
+
+      <div className="fumo-page-sheet -mt-5 flex min-h-0 flex-1 flex-col overflow-hidden border-0 bg-cream-card/95">
+        <div className="shrink-0 border-b border-dashed border-cream-border/55 bg-gradient-to-b from-white/90 to-cream-card/90 px-4 pb-4 pt-3">
+          <div className="flex items-center gap-3">
+            <img
+              src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar}
+              className="h-[4.25rem] w-[4.25rem] rounded-full border-[3px] border-white object-cover fumo-shadow"
+              alt=""
+            />
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-extrabold leading-tight text-cream-text">{fumo.name[language]}</h2>
+              <p className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-cream-text/55">
+                <span
+                  className={cn(
+                    'h-2 w-2 rounded-full',
+                    fumo.isOnline ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]' : 'bg-cream-border'
+                  )}
+                />
+                {fumo.isOnline
+                  ? language === 'zh'
+                    ? '在线'
+                    : language === 'ja'
+                      ? 'オンライン'
+                      : 'Online'
+                  : language === 'zh'
+                    ? '离线'
+                    : language === 'ja'
+                      ? 'オフライン'
+                      : 'Away'}
+              </p>
             </div>
           </div>
+          <div className="mt-3">
+            <div className="bond-bar-kawaii">
+              <div className="bond-bar-kawaii-fill" style={{ width: `${(liveFumo.bondLevel / 10) * 100}%` }} />
+            </div>
+            <p className="mt-1.5 text-center text-[10px] font-extrabold tracking-wide text-cream-text/50">
+              {language === 'zh'
+                ? `羁绊等级：${liveFumo.bondLevel} / 10`
+                : language === 'ja'
+                  ? `絆：${liveFumo.bondLevel} / 10`
+                  : `Bond: ${liveFumo.bondLevel} / 10`}
+            </p>
+          </div>
         </div>
-      </header>
 
-      {/* Chat Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
+        <div ref={scrollRef} className="chat-wood-bg flex-1 space-y-4 overflow-y-auto p-4 pb-36">
         <AnimatePresence initial={false}>
           {messages.map(msg => (
             <motion.div
@@ -624,12 +662,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               {msg.sender === 'fumo' && (
                 <img src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white self-end mb-1 fumo-shadow object-cover" alt="" />
               )}
-              <div className={cn(
-                "p-3 rounded-2xl stitched-border text-sm leading-relaxed",
-                msg.sender === 'user' 
-                  ? "bg-cream-accent/20 rounded-tr-none" 
-                  : "bg-white rounded-tl-none"
-              )}>
+              <div
+                className={cn('p-3', msg.sender === 'user' ? 'bubble-user-msg' : 'bubble-fumo-msg')}
+              >
                 {msg.text}
                 {msg.imageUrl && (
                   <button
@@ -665,25 +700,24 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         {isTyping && (
           <div className="flex gap-2 mr-auto">
             <img src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white self-end mb-1 fumo-shadow object-cover" alt="" />
-            <div className="bg-white p-3 rounded-2xl rounded-tl-none stitched-border flex gap-1">
-              <span className="w-1.5 h-1.5 bg-cream-accent rounded-full animate-bounce" />
-              <span className="w-1.5 h-1.5 bg-cream-accent rounded-full animate-bounce [animation-delay:0.2s]" />
-              <span className="w-1.5 h-1.5 bg-cream-accent rounded-full animate-bounce [animation-delay:0.4s]" />
+            <div className="bubble-fumo-msg flex gap-1 p-3">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cream-text/35" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cream-text/35 [animation-delay:0.2s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cream-text/35 [animation-delay:0.4s]" />
             </div>
           </div>
         )}
       </div>
 
-      {/* Input Area */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-cream-bg via-cream-bg to-transparent">
-        <div className="stitched-card bg-white/90 backdrop-blur-sm flex flex-col gap-2">
+      <div className="absolute bottom-0 left-0 right-0 z-20 max-w-md mx-auto bg-gradient-to-t from-fumo-nav-bar via-fumo-nav-bar/95 to-transparent px-3 pb-3 pt-6">
+        <div className="stitched-card flex flex-col gap-2 border-cream-border/80 bg-white/92 backdrop-blur-md">
             <div className="flex items-center gap-2">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder={language === 'zh' ? '输入你的消息...' : language === 'ja' ? 'メッセージを入力...' : 'Type a message...'}
-                className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-2"
+                className="flex-1 border-none bg-transparent py-2 text-sm font-medium text-cream-text placeholder:text-cream-text/35 focus:ring-0"
               />
               <div className="relative">
                 <button 
@@ -715,35 +749,36 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               </div>
               <button 
                 onClick={handleSend}
-                className="bg-cream-text text-white p-2 rounded-full hover:scale-110 active:scale-95 transition-transform"
+                className="rounded-full bg-cream-text p-2 text-white shadow-md transition-transform hover:scale-105 active:scale-95"
               >
-                <Send className="w-4 h-4" />
+                <Send className="h-4 w-4" strokeWidth={2.35} />
               </button>
             </div>
-          <div className="flex justify-around pt-2 border-t border-cream-border border-dashed">
+          <div className="flex justify-around border-t border-dashed border-cream-border/70 pt-2">
             <button 
               onClick={handleCamera}
-              className="flex flex-col items-center gap-1 opacity-60 hover:opacity-100"
+              className="flex flex-col items-center gap-1 text-cream-text/55 transition-opacity hover:opacity-100"
             >
-              <Camera className="w-5 h-5" />
-              <span className="text-[8px] font-bold uppercase">{language === 'zh' ? '相机' : language === 'ja' ? 'カメラ' : 'Camera'}</span>
+              <Camera className="h-5 w-5" strokeWidth={2.25} />
+              <span className="text-[9px] font-extrabold">{language === 'zh' ? '相机' : language === 'ja' ? 'カメラ' : 'Camera'}</span>
             </button>
             <button 
               onClick={() => setShowGifts(true)}
-              className="flex flex-col items-center gap-1 opacity-60 hover:opacity-100"
+              className="flex flex-col items-center gap-1 text-cream-text/55 transition-opacity hover:opacity-100"
             >
-              <Gift className="w-5 h-5" />
-              <span className="text-[8px] font-bold uppercase">{language === 'zh' ? '礼物' : language === 'ja' ? 'ギフト' : 'Gift'}</span>
+              <Gift className="h-5 w-5" strokeWidth={2.25} />
+              <span className="text-[9px] font-extrabold">{language === 'zh' ? '礼物' : language === 'ja' ? 'ギフト' : 'Gift'}</span>
             </button>
             <button 
               onClick={() => setShowExplore(true)}
-              className="flex flex-col items-center gap-1 opacity-60 hover:opacity-100"
+              className="flex flex-col items-center gap-1 text-cream-text/55 transition-opacity hover:opacity-100"
             >
-              <MapPin className="w-5 h-5" />
-              <span className="text-[8px] font-bold uppercase">{language === 'zh' ? '探索' : language === 'ja' ? '探索' : 'Explore'}</span>
+              <MapPin className="h-5 w-5" strokeWidth={2.25} />
+              <span className="text-[9px] font-extrabold">{language === 'zh' ? '探索' : language === 'ja' ? '探索' : 'Explore'}</span>
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

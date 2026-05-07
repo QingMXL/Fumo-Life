@@ -217,15 +217,38 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
       text: { zh: text.trim(), ja: text.trim(), en: text.trim() },
     };
 
+    const tempId = comment.id;
     setMoments(prev =>
       prev.map(m => (m.id === momentId ? { ...m, comments: [...m.comments, comment] } : m))
     );
     setCommentInputs(prev => ({ ...prev, [momentId]: '' }));
-    await createUserComment(userId, momentId, {
-      zh: text.trim(),
-      ja: text.trim(),
-      en: text.trim(),
-    });
+    try {
+      const savedId = await createUserComment(userId, momentId, {
+        zh: text.trim(),
+        ja: text.trim(),
+        en: text.trim(),
+      });
+      if (savedId) {
+        setMoments(prev =>
+          prev.map(m =>
+            m.id === momentId
+              ? {
+                  ...m,
+                  comments: m.comments.map(c => (c.id === tempId ? { ...c, id: savedId } : c)),
+                }
+              : m
+          )
+        );
+      }
+    } catch (e) {
+      console.error('createUserComment failed:', e);
+      setMoments(prev =>
+        prev.map(m =>
+          m.id === momentId ? { ...m, comments: m.comments.filter(c => c.id !== tempId) } : m
+        )
+      );
+      setCommentInputs(prev => ({ ...prev, [momentId]: text.trim() }));
+    }
   };
 
   const handlePost = async () => {
@@ -415,24 +438,28 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
   };
 
   return (
-    <div className="pb-24 pt-4 px-4 max-w-md mx-auto relative min-h-screen">
-      <header className="mb-6 flex justify-between items-end">
-        <div>
-          <h1 className="text-2xl font-black tracking-tighter text-cream-text">
-            {language === 'zh' ? '发现' : language === 'ja' ? '発見' : 'Discover'}
-          </h1>
-          <p className="text-xs opacity-50 font-bold uppercase tracking-widest mt-1">Fumo Moments</p>
+    <div className="max-w-md mx-auto min-h-screen pb-24">
+      <header className="fumo-header-sky px-4 pb-12 pt-5">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <h1 className="fumo-title-app text-xl font-black tracking-tight">
+              {language === 'zh' ? '发现' : language === 'ja' ? '発見' : 'Discover'}
+            </h1>
+            <p className="mt-1 text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/80">
+              Fumo Moments
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowPostModal(true)}
+            className="rounded-full border-2 border-white/50 bg-white/25 p-3 text-white shadow-md backdrop-blur-sm transition-transform hover:scale-105 active:scale-95"
+          >
+            <Plus className="h-5 w-5" strokeWidth={2.5} />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowPostModal(true)}
-          className="bg-cream-text text-white p-3 rounded-full fumo-shadow hover:scale-110 active:scale-95 transition-transform"
-        >
-          <Plus className="w-5 h-5" />
-        </button>
       </header>
 
-      <div className="space-y-8">
+      <div className="fumo-page-sheet -mt-8 space-y-8 px-4 pb-4 pt-6">
         {moments.map(moment => {
           const poster: Character | undefined =
             moment.authorType === 'character' && moment.characterId
