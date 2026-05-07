@@ -30,6 +30,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     () => ({
       title: language === 'zh' ? '账号登录' : language === 'ja' ? 'ログイン' : 'Sign in',
       subtitle: WELCOME[language],
+      langHint:
+        language === 'zh'
+          ? '选择界面语言'
+          : language === 'ja'
+            ? '表示言語を選ぶ'
+            : 'Choose display language',
       username: language === 'zh' ? '用户名' : language === 'ja' ? 'ユーザー名' : 'Username',
       password: language === 'zh' ? '密码' : language === 'ja' ? 'パスワード' : 'Password',
       submit: isRegister
@@ -79,20 +85,27 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         <p className="mx-auto mt-2 max-w-[18rem] text-xs font-bold leading-relaxed text-white/85">
           {labels.subtitle}
         </p>
-        <div className="mt-4 flex justify-center gap-2">
-          {(['zh', 'ja', 'en'] as const).map(lang => (
-            <button
-              key={lang}
-              type="button"
-              onClick={() => onLanguageChange(lang)}
-              className={cn(
-                'rounded-full border-2 border-white/50 px-3 py-1 text-[10px] font-extrabold backdrop-blur-sm transition-colors',
-                language === lang ? 'bg-white/35 text-white' : 'bg-white/15 text-white/90'
-              )}
-            >
-              {lang.toUpperCase()}
-            </button>
-          ))}
+        <div className="mx-auto mt-5 w-full max-w-[20rem] rounded-2xl border-2 border-dashed border-white/90 bg-white/25 px-3 py-3 shadow-[0_6px_24px_rgba(0,0,0,0.12)] backdrop-blur-md">
+          <p className="mb-2 text-center text-[11px] font-black uppercase tracking-[0.12em] text-white drop-shadow-sm">
+            {labels.langHint}
+          </p>
+          <div className="flex justify-center gap-2">
+            {(['zh', 'ja', 'en'] as const).map(lang => (
+              <button
+                key={lang}
+                type="button"
+                onClick={() => onLanguageChange(lang)}
+                className={cn(
+                  'min-w-[5rem] rounded-xl border-2 px-2 py-2.5 text-xs font-black shadow-md transition-all active:scale-95',
+                  language === lang
+                    ? 'border-white bg-white text-cream-text ring-2 ring-white/80 ring-offset-2 ring-offset-transparent'
+                    : 'border-white/80 bg-white/20 text-white hover:bg-white/35'
+                )}
+              >
+                {lang === 'zh' ? '中文' : lang === 'ja' ? '日本語' : 'English'}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 

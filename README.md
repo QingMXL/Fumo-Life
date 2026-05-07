@@ -14,49 +14,60 @@
 
 ---
 
-### Introduction
+## What it is
 
-**Fumo² Life** lets you cross the barrier and live next door to Gensokyo residents trapped in **Fumo form**.
+**Fumo² Life** is a cozy, AI-driven social companion web app: you chat with Touhou characters as if they lived next door in **Fumo form**, browse a **Discover** feed of their “moments,” and keep a personal **album** of images from the feed, your own posts, and plush scene shots from chat.
 
-It is a cozy, AI-powered raising-style web app. **Nano Banana 2**–class language and image capabilities aim for companionship you can almost feel. You are not clicking a generic doll UI—you are sharing daily life with characters whose personalities and memories stay close to canon, limited only by stubby limbs and stuffing.
+It is built for **daily-life roleplay**—warm, in-lore tone without leaning on “I’m a plushie” meta—and ships with **中文 / 日本語 / English** UI and model prompts tuned per language.
 
-> The app talks to models through the **Google Gemini API**. For local development, set `GEMINI_API_KEY` (see Quick Start).
+---
 
-### Visual identity
+## Features & highlights
 
-The art direction is **“soft enough to touch”**, not flat or sticker-like.
+### Messaging
 
-1. **Stitching aesthetic (cream UI)**  
-   Warm cream palette, linen-like texture, visible stitched edges on cards and bubbles, soft diffuse light and a stacked “plush panel” depth.
+- **1:1 threads** with each character: typing indicators, gifts, stickers / kaomoji, optional **AI-generated scene images** (Gemini image model, with optional **Nano Banana** endpoint if you configure it).
+- **Replies** use per-character style prompts and **anti-repeat** hints so different roles are less likely to send the same line; proactive “incoming” messages use a **cross-character** memory list to reduce copy-paste chatter across the cast.
+- **Bond** levels and **unread** previews persist in the cloud; chat history is stored in **Supabase** and mirrored in the browser for resilience (slow network or brief outages won’t wipe the thread you were just reading).
 
-2. **Hardcore Fumo look**  
-   Avatars, social posts, and travel shots should read as **3D plush** (velvet, wool, stitching), **dot eyes without specular highlights**, and **embroidered features**—never 2D decals.
+### Discover (Moments)
 
-### Core features
+- A **Moments** feed mixing **seed posts** from the cast (with local artwork under `public/moments/`) and **your own** text/image posts.
+- **Likes** and **comments** (you, characters, and AI-generated replies on your posts). Unread-style cues for **new character comments** on **your** moments.
+- User photos are stored as **persisted image data** (not fragile `blob:` URLs) so images still load after refresh.
 
-1. **Multilingual “Soul of Fumo”**  
-   - **Form, not confession**: first-person daily life without leaning on “I’m a plushie” meta; avoid OOC lines like “as a Fumo” or “pet my fluff.”  
-   - **Message splitting**: one thought → 2–3 short bubbles, like real chat pacing.
+### Me & album
 
-2. **Internationalization**  
-   中文 / 日本語 / English with tone that fits each language (e.g. Japanese keigo where appropriate).
+- Profile, language, notifications placeholders, privacy blurb, **clear all chats**, and **switch user**.
+- **Album** aggregates: Discover seed art, images from **your** moments, and **AI / plush** images from chat—so the gallery reflects what you’ve actually collected in-app.
 
-3. **Fumo life**  
-   - **Messages** — thread list (Fumo avatars)  
-   - **Contacts** — index of characters you’ve met  
-   - **Discover** — async “moments” from Gensokyo  
-   - **Me** — settings and a Fumo photo gallery (filterable by character)  
-   - **Camera** — in-the-moment plush photos  
-   - **Explore** — travel mechanics
+### Account & data
 
-### Supabase auth & persistence
+- **Register / login** with username + password (password hashed client-side; see `schema.sql` notes for production hardening).
+- **Switch user** ends the session and **clears that account’s app data** in Supabase (messages, your moments, likes, bonds, unread, etc.) plus local caches—intended as a **fresh start** when you hand the device to another “keeper” or start over.
+- Near **real-time** updates for messages and moments where Supabase Realtime is enabled.
 
-- Username/password login and registration are enabled (default username: `神社客`).
-- Login state persists across refresh (local session + cloud profile lookup).
-- Chat history, moments, comments, likes, unread states, and bond levels are stored in Supabase.
-- Discover/chat data updates in near real-time via Supabase Realtime subscriptions.
+### Look & feel
 
-### Quick start
+- **Cream “stitched” UI**: soft cards, sky-style headers, chat bubbles that read like a cozy diary—not a flat sticker pack.
+- **Fumo-forward visuals**: prompts and art direction aim for **3D plush** (pile, stitching, dot eyes without harsh speculars), not generic chibi stickers.
+
+---
+
+## Tech stack
+
+| Area | Choice |
+|------|--------|
+| Frontend | React 19, Vite, Tailwind, Motion, React Router |
+| AI | Google **Gemini** (`@google/genai`) for chat, moment comments, and image generation |
+| Backend / sync | **Supabase** (Postgres + optional Realtime) |
+| Optional images | `VITE_NANO_BANANA_ENDPOINT` + `VITE_NANO_BANANA_API_KEY` for an external image API |
+
+> Local dev: set `GEMINI_API_KEY` in `.env.local`. The app reads Supabase keys from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+
+---
+
+## Quick start
 
 **Prerequisites:** Node.js (LTS recommended)
 
@@ -74,6 +85,7 @@ cp .env.example .env.local
 # GEMINI_API_KEY
 # VITE_SUPABASE_URL
 # VITE_SUPABASE_ANON_KEY
+# Optional: VITE_NANO_BANANA_ENDPOINT, VITE_NANO_BANANA_API_KEY
 ```
 
 Initialize Supabase tables:
@@ -90,9 +102,11 @@ npm run dev
 
 Other scripts: `npm run build`, `npm run preview`, `npm run lint`.
 
-### Contributing
+---
 
-PRs welcome—especially **localized prompt tuning** per character to avoid OOC drift.
+## Contributing
+
+PRs welcome—especially **localized prompt tuning** per character to keep voices distinct and on-lore.
 
 When adding a **new Fumo**, follow the Fumo form spec in the PRD. Strong image prompts usually specify:
 
@@ -107,12 +121,15 @@ When adding a **new Fumo**, follow the Fumo form spec in the PRD. Strong image p
 (Highly detailed 3D rendering:1.2), (soft plush texture with visible velvet and wool fabrics:1.3), handcrafted quality, soft velvet body with fine stitching threads, chibi aesthetic, signature Fumo design with large head and short limbs, round black dot eyes without high reflections, embroidered mouth, photorealistic style, cute and comforting. [CHARACTER DETAILS HERE].
 ```
 
-### Acknowledgements
+---
+
+## Acknowledgements
 
 - **ZUN 上海アリス幻樂団** — *Touhou Project*  
-- **Fumo designers**  
- 
+- **Fumo designers**
 
-### License
+---
+
+## License
 
 MIT License

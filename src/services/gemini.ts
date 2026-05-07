@@ -63,6 +63,12 @@ export async function generateFumoResponse(
   const character = CHARACTERS.find(c => c.id === characterId);
   if (!character) throw new Error("Character not found");
 
+  const crossRecent = loadRecent(`fumo-ai-recent:reply:cross:${language}`).slice(-20);
+  const crossBlock =
+    crossRecent.length > 0
+      ? crossRecent.map((t, i) => `${i + 1}. ${t}`).join('\n')
+      : '(none)';
+
   const systemInstruction = `
 [IDENTITY]
 You are ${character.name[language]} from Touhou Project, strict in-lore roleplay.
@@ -74,6 +80,10 @@ You are ${character.name[language]} from Touhou Project, strict in-lore roleplay
 - Keep daily chat short and spoken, not literary.
 - Language must be ONLY ${language}.
 - Avoid repeating recent wording/phrases.
+- Do NOT copy or lightly paraphrase lines recently used by ANY other character (list below).
+
+[CROSS-CHARACTER NO-REUSE]
+${crossBlock}
 
 [STYLE]
 ${styleFor(characterId)}
@@ -99,6 +109,7 @@ ${styleFor(characterId)}
   const text = (result.text || '').trim();
   const sig = normalizeSig(text);
   saveRecent(`fumo-ai-recent:reply:${characterId}:${language}`, sig);
+  saveRecent(`fumo-ai-recent:reply:cross:${language}`, sig);
   return text;
 }
 
@@ -112,6 +123,9 @@ export async function generateCharacterProactiveText(
 
   const recent = loadRecent(`fumo-ai-recent:${kind}:${characterId}:${language}`).slice(-8);
   const recentBlock = recent.length > 0 ? recent.map((t, i) => `${i + 1}. ${t}`).join('\n') : '(none)';
+  const crossKey = `fumo-ai-recent:${kind}:cross:${language}`;
+  const crossRecent = loadRecent(crossKey).slice(-28);
+  const crossBlock = crossRecent.length > 0 ? crossRecent.map((t, i) => `${i + 1}. ${t}`).join('\n') : '(none)';
   const task = kind === 'moment'
     ? laneText(
         language,
@@ -135,8 +149,11 @@ You are ${character.name[language]} from Touhou Project, strict in-lore.
 - Keep daily-life and healing tone in Gensokyo.
 - Style: ${styleFor(characterId)}
 - Hard anti-repeat against list below.
-Recent:
+- Do NOT reuse or paraphrase anything in the ALL-CHARACTERS list (other roles may have said it).
+This character's recent:
 ${recentBlock}
+All characters' recent (avoid sounding like any of these):
+${crossBlock}
 Output plain text only.
 `;
 
@@ -148,18 +165,34 @@ Output plain text only.
 
   const text = (out.text || '').trim();
   const sig = normalizeSig(text);
-  if (recent.includes(sig)) {
+  if (recent.includes(sig) || crossRecent.includes(sig)) {
     const retry = await genAI.models.generateContent({
       model: 'gemini-3-flash-preview',
       config: { systemInstruction: `${systemInstruction}\nRetry with a different angle.` },
       contents: [{ role: 'user', parts: [{ text: task }] }],
     });
     const text2 = (retry.text || text).trim();
-    saveRecent(`fumo-ai-recent:${kind}:${characterId}:${language}`, normalizeSig(text2));
+    const sig2 = normalizeSig(text2);
+    saveRecent(`fumo-ai-recent:${kind}:${characterId}:${language}`, sig2);
+    saveRecent(crossKey, sig2);
     return text2;
   }
   saveRecent(`fumo-ai-recent:${kind}:${characterId}:${language}`, sig);
+  saveRecent(crossKey, sig);
   return text;
+}
+
+export function clearAllAiRecentCaches() {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith('fumo-ai-recent')) keys.push(k);
+    }
+    keys.forEach(k => localStorage.removeItem(k));
+  } catch {
+    /* ignore */
+  }
 }
 
 export function shouldAttachAiImage() {

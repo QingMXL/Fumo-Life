@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { type Language, type Character, type UserProfile } from '@/types';
-import { Settings, Camera, Heart, Globe, Bell, Shield, X, ChevronRight } from 'lucide-react';
+import { Settings, Camera, Heart, Globe, Bell, Shield, X, ChevronRight, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchMyAlbumImages, type AlbumImageItem } from '@/services/cloudStore';
-import { resolvePublicAssetUrl } from '@/lib/utils';
+import { cn, resolvePublicAssetUrl, downloadImageFromUrl } from '@/lib/utils';
 
 interface MePageProps {
   language: Language;
@@ -12,7 +12,7 @@ interface MePageProps {
   userId: string;
   userProfile: UserProfile;
   onUserProfileChange: (p: UserProfile) => void;
-  onSwitchUser: () => void;
+  onSwitchUser: () => void | Promise<void>;
   onClearChats: () => Promise<void>;
 }
 
@@ -34,7 +34,7 @@ export const MePage: React.FC<MePageProps> = ({
   const [showAlbum, setShowAlbum] = useState(false);
   const [albumPhotos, setAlbumPhotos] = useState<AlbumImageItem[]>([]);
   const [albumLoading, setAlbumLoading] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewItem, setPreviewItem] = useState<AlbumImageItem | null>(null);
 
   const totalBond = characters.reduce((acc, c) => acc + c.bondLevel, 0);
 
@@ -54,7 +54,6 @@ export const MePage: React.FC<MePageProps> = ({
   }, [showAlbum, userId]);
 
   useEffect(() => {
-    // 入口角标也显示真实数量：页面加载时预取一次。
     void fetchMyAlbumImages(userId).then(setAlbumPhotos);
   }, [userId]);
 
@@ -310,7 +309,7 @@ export const MePage: React.FC<MePageProps> = ({
                   <button
                     type="button"
                     key={item.id}
-                    onClick={() => setPreviewImage(item.imageUrl)}
+                    onClick={() => setPreviewItem(item)}
                     className="aspect-square rounded-2xl overflow-hidden stitched-border border-dashed"
                   >
                     <img src={resolvePublicAssetUrl(item.imageUrl) ?? item.imageUrl} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
@@ -320,20 +319,39 @@ export const MePage: React.FC<MePageProps> = ({
             </div>
           </Modal>
         )}
-        {previewImage && (
+        {previewItem && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4"
-            onClick={() => setPreviewImage(null)}
+            className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/70 p-4"
+            onClick={() => setPreviewItem(null)}
           >
-            <img
-              src={resolvePublicAssetUrl(previewImage) ?? previewImage ?? ''}
-              className="max-w-full max-h-full rounded-2xl stitched-border border-white"
-              alt=""
-              referrerPolicy="no-referrer"
-            />
+            <div className="relative max-h-[85vh] max-w-full" onClick={e => e.stopPropagation()}>
+              <img
+                src={resolvePublicAssetUrl(previewItem.imageUrl) ?? previewItem.imageUrl}
+                className="max-h-[80vh] max-w-full rounded-2xl border-2 border-dashed border-white object-contain fumo-shadow"
+                alt=""
+                referrerPolicy="no-referrer"
+              />
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation();
+                  void downloadImageFromUrl(
+                    previewItem.imageUrl,
+                    `fumo-album-${previewItem.id.replace(/^[^a-zA-Z0-9]+/, '')}`
+                  );
+                }}
+                className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full border-2 border-dashed border-white bg-cream-card/95 px-3 py-2 text-xs font-extrabold text-cream-text shadow-lg transition-transform hover:scale-105 active:scale-95"
+              >
+                <Download className="h-4 w-4" strokeWidth={2.25} />
+                {language === 'zh' ? '保存' : language === 'ja' ? '保存' : 'Save'}
+              </button>
+            </div>
+            <p className="mt-3 text-center text-[11px] font-bold text-white/70">
+              {language === 'zh' ? '点击背景关闭' : language === 'ja' ? '背景タップで閉じる' : 'Tap backdrop to close'}
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -367,7 +385,3 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
     </motion.div>
   </motion.div>
 );
-
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ');
-}

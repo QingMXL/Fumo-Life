@@ -7,6 +7,8 @@ import {
   generateFumoSceneImage,
   shouldAttachAiImage,
 } from '@/services/gemini';
+import { loadChatMirror, mergeChatMirrorWithCloud, saveChatMirror } from '@/lib/chatLocalMirror';
+import { fileOrBlobUrlToJpegDataUrl } from '@/lib/imageDataUrl';
 import { cn, resolvePublicAssetUrl } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -125,6 +127,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [isTyping, setIsTyping] = useState(false);
   const [menuMessage, setMenuMessage] = useState<Message | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
+  const mirrorSaveTimerRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const messageEnterAnimate = (msg: Message) =>
@@ -138,7 +141,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     setHydrateAt(null);
     onMarkChatRead(fumo.id);
     let alive = true;
-    const FETCH_DEADLINE_MS = 10_000;
+    const FETCH_DEADLINE_MS = 25_000;
+    const clearedAt = localStorage.getItem(`${CHAT_CLEARED_KEY_PREFIX}${userId}`);
+    const localMirror = clearedAt ? [] : loadChatMirror(userId, fumo.id);
     (async () => {
       let cloud: Message[] = [];
       try {
@@ -149,7 +154,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           }),
         ]);
       } catch (e) {
-        console.error('fetchMessages failed, fallback to seeded chat:', e);
+        console.error('fetchMessages failed, using mirror / seeded chat:', e);
       }
       if (!alive) return;
       const markHydrated = (batch: Message[]) => {
@@ -157,12 +162,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         setMessages(batch);
         setHydrateAt(t);
       };
-      if (cloud.length > 0) {
-        markHydrated(normalizeChat(cloud));
+      const merged = normalizeChat(mergeChatMirrorWithCloud(cloud, localMirror));
+      if (merged.length > 0) {
+        markHydrated(merged);
+        saveChatMirror(userId, fumo.id, merged);
         return;
       }
-      // 用户手动“清空聊天内容”后，无历史时保持空白，等待新消息。
-      const clearedAt = localStorage.getItem(`${CHAT_CLEARED_KEY_PREFIX}${userId}`);
       if (clearedAt) {
         markHydrated([]);
         return;
@@ -199,6 +204,21 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       unsub();
     };
   }, [fumo?.id, language, onMarkChatRead, userId]);
+
+  useEffect(() => {
+    if (!fumo) return;
+    const hasReal = messages.some(
+      m => !m.id.startsWith('unread-') && !m.id.startsWith('starter-')
+    );
+    if (!hasReal) return;
+    if (mirrorSaveTimerRef.current != null) window.clearTimeout(mirrorSaveTimerRef.current);
+    mirrorSaveTimerRef.current = window.setTimeout(() => {
+      saveChatMirror(userId, fumo.id, messages);
+    }, 450);
+    return () => {
+      if (mirrorSaveTimerRef.current != null) window.clearTimeout(mirrorSaveTimerRef.current);
+    };
+  }, [messages, fumo?.id, userId]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -290,20 +310,32 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     // On mobile, this typically offers camera / recent photos.
     (picker as any).capture = 'environment';
     picker.onchange = (e: any) => {
-      const file: File | undefined = e.target.files?.[0];
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      const msg: Message = {
-        id: `tmp-${Date.now()}`,
-        characterId: fumo.id,
-        sender: 'user',
-        text: '',
-        timestamp: new Date(),
-        imageUrl: url,
-      };
-      setMessages(prev => [...prev, msg]);
-      void insertMessage(userId, { characterId: fumo.id, sender: 'user', imageUrl: url, text: '' });
-      onConversationMeta(fumo.id, language === 'zh' ? '[图片]' : language === 'ja' ? '[画像]' : '[Photo]', msg.timestamp.getTime());
+      void (async () => {
+        const file: File | undefined = e.target.files?.[0];
+        if (!file) return;
+        let dataUrl: string;
+        try {
+          dataUrl = await fileOrBlobUrlToJpegDataUrl(file);
+        } catch (err) {
+          console.error(err);
+          return;
+        }
+        const msg: Message = {
+          id: `tmp-${Date.now()}`,
+          characterId: fumo.id,
+          sender: 'user',
+          text: '',
+          timestamp: new Date(),
+          imageUrl: dataUrl,
+        };
+        setMessages(prev => [...prev, msg]);
+        try {
+          await insertMessage(userId, { characterId: fumo.id, sender: 'user', imageUrl: dataUrl, text: '' });
+        } catch (err) {
+          console.error(err);
+        }
+        onConversationMeta(fumo.id, language === 'zh' ? '[图片]' : language === 'ja' ? '[画像]' : '[Photo]', msg.timestamp.getTime());
+      })();
     };
     picker.click();
   };

@@ -6,7 +6,7 @@ import {
   type Moment,
   type MomentComment,
 } from '@/types';
-import { CHARACTER_SEED_TEXT_ONLY_KEYS } from '@/data/characterSeedMoments';
+import { CHARACTER_SEED_TEXT_ONLY_KEYS, getDiscoverSeedAlbumEntries } from '@/data/characterSeedMoments';
 import { generateFumoSceneImage } from './gemini';
 import { supabase, isSupabaseReady } from './supabase';
 
@@ -777,53 +777,93 @@ export async function clearUserMessages(userId: string) {
   if (error) throw error;
 }
 
+/** 登出/切换用户：删除该用户在应用内产生的数据（角色公共动态不受影响）。 */
+export async function purgeUserCloudContent(userId: string) {
+  if (!isSupabaseReady()) return;
+  const ops = await Promise.all([
+    supabase.from('likes').delete().eq('user_id', userId),
+    supabase.from('comments').delete().eq('user_id', userId),
+    supabase.from('moments').delete().eq('user_id', userId),
+    supabase.from('messages').delete().eq('user_id', userId),
+    supabase.from('bonds').delete().eq('user_id', userId),
+    supabase.from('unread_states').delete().eq('user_id', userId),
+  ]);
+  for (const { error } of ops) {
+    if (error) throw error;
+  }
+}
+
 export interface AlbumImageItem {
   id: string;
   imageUrl: string;
   createdAt: string;
-  source: 'user_moment' | 'ai_chat';
+  source: 'user_moment' | 'ai_chat' | 'discover_moment';
 }
 
-/** 我的相册聚合：用户动态图片 + AI 聊天配图（倒序）。 */
+function mergeAlbumDedupeByUrl(items: AlbumImageItem[]): AlbumImageItem[] {
+  const byUrl = new Map<string, AlbumImageItem>();
+  for (const it of items) {
+    const k = it.imageUrl.trim();
+    if (!k) continue;
+    const prev = byUrl.get(k);
+    if (!prev || new Date(it.createdAt).getTime() > new Date(prev.createdAt).getTime()) {
+      byUrl.set(k, it);
+    }
+  }
+  return [...byUrl.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+/** 我的相册：发现页角色种子配图 + 用户动态配图 + AI 聊天配图。 */
 export async function fetchMyAlbumImages(userId: string): Promise<AlbumImageItem[]> {
-  if (!isSupabaseReady()) return [];
-  const [momentsRes, chatRes] = await Promise.all([
-    supabase
-      .from('moments')
-      .select('id, image_url, created_at')
-      .eq('author_type', 'user')
-      .eq('user_id', userId)
-      .not('image_url', 'is', null)
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('messages')
-      .select('id, image_url, created_at')
-      .eq('user_id', userId)
-      .eq('sender', 'fumo')
-      .not('image_url', 'is', null)
-      .order('created_at', { ascending: false }),
-  ]);
-  if (momentsRes.error) throw momentsRes.error;
-  if (chatRes.error) throw chatRes.error;
+  const seedItems: AlbumImageItem[] = getDiscoverSeedAlbumEntries().map(r => ({
+    id: r.id,
+    imageUrl: r.imageUrl,
+    createdAt: r.createdAt,
+    source: 'discover_moment',
+  }));
 
-  const items: AlbumImageItem[] = [
-    ...((momentsRes.data ?? []) as Array<{ id: string; image_url: string | null; created_at: string }>).map(r => ({
-      id: `m-${r.id}`,
-      imageUrl: r.image_url ?? '',
-      createdAt: r.created_at,
-      source: 'user_moment' as const,
-    })),
-    ...((chatRes.data ?? []) as Array<{ id: string; image_url: string | null; created_at: string }>).map(r => ({
-      id: `c-${r.id}`,
-      imageUrl: r.image_url ?? '',
-      createdAt: r.created_at,
-      source: 'ai_chat' as const,
-    })),
-  ]
-    .filter(it => Boolean(it.imageUrl))
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  if (!isSupabaseReady()) return mergeAlbumDedupeByUrl(seedItems);
+  try {
+    const [momentsRes, chatRes] = await Promise.all([
+      supabase
+        .from('moments')
+        .select('id, image_url, created_at')
+        .eq('author_type', 'user')
+        .eq('user_id', userId)
+        .not('image_url', 'is', null)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('messages')
+        .select('id, image_url, created_at')
+        .eq('user_id', userId)
+        .eq('sender', 'fumo')
+        .not('image_url', 'is', null)
+        .order('created_at', { ascending: false }),
+    ]);
+    if (momentsRes.error) throw momentsRes.error;
+    if (chatRes.error) throw chatRes.error;
 
-  return items;
+    const cloudItems: AlbumImageItem[] = [
+      ...((momentsRes.data ?? []) as Array<{ id: string; image_url: string | null; created_at: string }>).map(r => ({
+        id: `m-${r.id}`,
+        imageUrl: r.image_url ?? '',
+        createdAt: r.created_at,
+        source: 'user_moment' as const,
+      })),
+      ...((chatRes.data ?? []) as Array<{ id: string; image_url: string | null; created_at: string }>).map(r => ({
+        id: `c-${r.id}`,
+        imageUrl: r.image_url ?? '',
+        createdAt: r.created_at,
+        source: 'ai_chat' as const,
+      })),
+    ].filter(it => Boolean(it.imageUrl));
+
+    return mergeAlbumDedupeByUrl([...seedItems, ...cloudItems]);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[album] cloud fetch failed, showing discover seeds only:', e);
+    return mergeAlbumDedupeByUrl(seedItems);
+  }
 }
 
 /**

@@ -454,3 +454,14 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = RAW_CHARACTER_SEED_MOMENTS.map(m
   if (CHARACTER_SEED_TEXT_ONLY_IDS.has(m.id)) return { ...m };
   return { ...m, imageUrl: `/moments/${m.id}.png` };
 });
+
+/** 「我的相册」展示发现页角色种子配图（与 CHARACTER_SEED_MOMENTS 同步）。 */
+export function getDiscoverSeedAlbumEntries(): Array<{ id: string; imageUrl: string; createdAt: string }> {
+  return CHARACTER_SEED_MOMENTS.filter(
+    m => m.authorType === 'character' && Boolean(m.imageUrl?.trim())
+  ).map(m => ({
+    id: `discover-seed-${m.id}`,
+    imageUrl: m.imageUrl!,
+    createdAt: m.timestamp.toISOString(),
+  }));
+}

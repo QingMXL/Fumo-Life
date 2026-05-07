@@ -10,6 +10,7 @@ import {
 import { Heart, MessageCircle, Download, Plus, Camera, X, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
+import { fileOrBlobUrlToJpegDataUrl } from '@/lib/imageDataUrl';
 import { cn, resolvePublicAssetUrl } from '@/lib/utils';
 import { buildEngagementForUserPost } from '@/data/momentNpcReplies';
 import { CHARACTER_SEED_MOMENTS } from '@/data/characterSeedMoments';
@@ -181,11 +182,8 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     [moments, readTick]
   );
 
-  useEffect(() => {
-    // The BottomNav badge uses unread *moments* count (per your choice B earlier),
-    // but keep this in case we later want “comment count” without changing behavior.
-    void unreadCommentsTotal;
-  }, [unreadCommentsTotal]);
+  const unreadCommentsLabel =
+    language === 'zh' ? '未读评论' : language === 'ja' ? '未読コメント' : 'Unread';
 
   const handleLike = async (id: string) => {
     const wasLiked = likedMoments.has(id);
@@ -253,6 +251,20 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
 
   const handlePost = async () => {
     if (!newPostContent.trim()) return;
+    let imageForMoment: string | undefined;
+    const pickedPreview = newPostImageUrl;
+    if (pickedPreview) {
+      try {
+        if (pickedPreview.startsWith('blob:')) {
+          imageForMoment = await fileOrBlobUrlToJpegDataUrl(pickedPreview);
+          URL.revokeObjectURL(pickedPreview);
+        } else {
+          imageForMoment = pickedPreview;
+        }
+      } catch (e) {
+        console.error('moment image:', e);
+      }
+    }
     // 优先走 Gemini 生成角色评论；失败时回退静态模板，保证可用性。
     let aiComments: MomentComment[] = [];
     try {
@@ -276,7 +288,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
         ja: newPostContent.trim(),
         en: newPostContent.trim(),
       },
-      imageUrl: newPostImageUrl ?? undefined,
+      imageUrl: imageForMoment,
       timestamp: new Date(),
       likes: 0,
       comments: [],
@@ -441,7 +453,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     <div className="max-w-md mx-auto min-h-screen pb-24">
       <header className="fumo-header-sky px-4 pb-12 pt-5">
         <div className="flex items-end justify-between gap-3">
-          <div>
+          <div className="min-w-0 flex-1">
             <h1 className="fumo-title-app text-xl font-black tracking-tight">
               {language === 'zh' ? '发现' : language === 'ja' ? '発見' : 'Discover'}
             </h1>
@@ -449,13 +461,35 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
               Fumo Moments
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowPostModal(true)}
-            className="rounded-full border-2 border-white/50 bg-white/25 p-3 text-white shadow-md backdrop-blur-sm transition-transform hover:scale-105 active:scale-95"
-          >
-            <Plus className="h-5 w-5" strokeWidth={2.5} />
-          </button>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            {unreadCommentsTotal > 0 ? (
+              <div
+                className="flex max-w-[10.5rem] items-center gap-1.5 rounded-2xl border-2 border-dashed border-white/95 bg-white/30 px-2.5 py-1.5 text-[10px] font-black leading-tight text-white shadow-[0_4px_14px_rgba(0,0,0,0.12)] backdrop-blur-sm"
+                title={
+                  language === 'zh'
+                    ? '你的动态下有角色新评论，点进卡片可标记已读'
+                    : language === 'ja'
+                      ? 'あなたの投稿に新着コメントがあります'
+                      : 'New character replies on your posts — open a card to mark read'
+                }
+                role="status"
+                aria-live="polite"
+              >
+                <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#FF4D4D] px-1 text-[9px] text-white ring-2 ring-white/90">
+                  {unreadCommentsTotal > 99 ? '99+' : unreadCommentsTotal}
+                </span>
+                <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-95" strokeWidth={2.6} />
+                <span className="text-left font-extrabold">{unreadCommentsLabel}</span>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setShowPostModal(true)}
+              className="rounded-full border-2 border-white/50 bg-white/25 p-3 text-white shadow-md backdrop-blur-sm transition-transform hover:scale-105 active:scale-95"
+            >
+              <Plus className="h-5 w-5" strokeWidth={2.5} />
+            </button>
+          </div>
         </div>
       </header>
 

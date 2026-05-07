@@ -1,15 +1,17 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { type Language, type UserProfile, type Character, type Message, CHARACTERS as INITIAL_CHARACTERS } from './types';
 import { BottomNav } from './components/BottomNav';
 import { MessagesPage } from './pages/MessagesPage';
-import { ChatPage } from './pages/ChatPage';
-import { ContactsPage } from './pages/ContactsPage';
-import { DiscoverPage } from './pages/DiscoverPage';
-import { MePage } from './pages/MePage';
 import { LoginPage } from './pages/LoginPage';
-import { generateCharacterProactiveText, generateFumoSceneImage, shouldAttachAiImage } from './services/gemini';
+
+const ChatPage = lazy(() => import('./pages/ChatPage').then(m => ({ default: m.ChatPage })));
+const ContactsPage = lazy(() => import('./pages/ContactsPage').then(m => ({ default: m.ContactsPage })));
+const DiscoverPage = lazy(() => import('./pages/DiscoverPage').then(m => ({ default: m.DiscoverPage })));
+const MePage = lazy(() => import('./pages/MePage').then(m => ({ default: m.MePage })));
 import { type AppUser, logout, restoreAuthUser } from './services/auth';
+import { clearChatMirrorsForUser } from '@/lib/chatLocalMirror';
+import { clearLocalSessionArtifacts } from '@/lib/sessionCleanup';
 import {
   clearUserMessages,
   createCharacterMoment,
@@ -17,6 +19,7 @@ import {
   loadBonds,
   loadUnreadStates,
   mapPreviewByLanguage,
+  purgeUserCloudContent,
   saveUnreadState,
   upsertBond,
   updateCloudUserProfile,
@@ -82,18 +85,28 @@ export default function App() {
     });
   }, [authUser, userProfile.avatarUrl, userProfile.displayName]);
 
-  const handleSwitchUser = useCallback(() => {
-    // 清空当前登录态与本地展示态，返回登录页。
+  const handleSwitchUser = useCallback(async () => {
+    const uid = authUser?.id ?? null;
+    if (uid) {
+      try {
+        await purgeUserCloudContent(uid);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[auth] purgeUserCloudContent:', e);
+      }
+    }
+    clearLocalSessionArtifacts(uid);
     logout();
     setAuthUser(null);
     setCharacters(INITIAL_CHARACTERS);
     setUserProfile({ displayName: '神社客', avatarUrl: '/avatars/user.png' });
     setDiscoverUnreadCount(0);
-  }, []);
+  }, [authUser]);
 
   const handleClearChats = useCallback(async () => {
     if (!authUser) return;
     await clearUserMessages(authUser.id);
+    clearChatMirrorsForUser(authUser.id);
     // 标记本次用户已主动清空，聊天页无历史时不再展示兜底开场白。
     localStorage.setItem(`${CHAT_CLEARED_KEY_PREFIX}${authUser.id}`, String(Date.now()));
   }, [authUser]);
@@ -264,26 +277,33 @@ export default function App() {
       const inChat = window.location.pathname === `/chat/${pick.id}`;
       if (inChat) return;
       void (async () => {
-        const text = await generateCharacterProactiveText(pick.id, language, 'chat');
-        let imageUrl: string | undefined;
-        if (shouldAttachAiImage()) {
-          const img = await generateFumoSceneImage(pick.id, language, text);
-          if (img) imageUrl = img;
-        }
-        await insertMessage(authUser.id, {
-          characterId: pick.id,
-          sender: 'fumo',
-          text,
-          imageUrl,
-        });
-        if (imageUrl) {
-          // 仅有配图时写入角色动态，避免纯文本刷屏朋友圈。
-          await createCharacterMoment(pick.id, {
-            content: { zh: text, ja: text, en: text },
+        try {
+          const { generateCharacterProactiveText, generateFumoSceneImage, shouldAttachAiImage } = await import(
+            './services/gemini'
+          );
+          const text = await generateCharacterProactiveText(pick.id, language, 'chat');
+          let imageUrl: string | undefined;
+          if (shouldAttachAiImage()) {
+            const img = await generateFumoSceneImage(pick.id, language, text);
+            if (img) imageUrl = img;
+          }
+          await insertMessage(authUser.id, {
+            characterId: pick.id,
+            sender: 'fumo',
+            text,
             imageUrl,
           });
+          if (imageUrl) {
+            await createCharacterMoment(pick.id, {
+              content: { zh: text, ja: text, en: text },
+              imageUrl,
+            });
+          }
+          updateConversationMeta(pick.id, imageUrl ? `${text} [Photo]` : text, now, { incrementUnread: true });
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[proactive] skipped:', e);
         }
-        updateConversationMeta(pick.id, imageUrl ? `${text} [Photo]` : text, now, { incrementUnread: true });
       })();
     }, 28_000 + Math.floor(Math.random() * 15_000));
     return () => window.clearInterval(interval);
@@ -316,62 +336,70 @@ export default function App() {
     );
   }
 
+  const routeFallback = (
+    <div className="flex min-h-[55vh] max-w-md mx-auto items-center justify-center pb-24 text-sm font-extrabold text-cream-text/40">
+      …
+    </div>
+  );
+
   return (
     <Router>
       <div className="min-h-screen bg-cream-bg text-cream-text selection:bg-cream-accent/30">
-        <Routes>
-          <Route path="/" element={<MessagesPage language={language} characters={characters} />} />
-          <Route
-            path="/chat/:id"
-            element={
-              <ChatPage
-                language={language}
-                characters={characters}
-                userId={authUser.id}
-                onUpdateBond={updateBond}
-                onMarkChatRead={markChatRead}
-                onConversationMeta={updateConversationMeta}
-              />
-            }
-          />
-          <Route
-            path="/contacts"
-            element={
-              <ContactsPage
-                language={language}
-                characters={characters}
-                onEnterRefreshOnline={refreshOnlineStatus}
-              />
-            }
-          />
-          <Route
-            path="/discover"
-            element={
-              <DiscoverPage
-                language={language}
-                userId={authUser.id}
-                userProfile={userProfile}
-                characters={characters}
-                onUnreadCountChange={setDiscoverUnreadCount}
-              />
-            }
-          />
-          <Route
-            path="/me"
-            element={
-              <MePage
-                language={language}
-                setLanguage={setLanguage}
-                characters={characters}
-                userId={authUser.id}
-                userProfile={userProfile}
-                onUserProfileChange={setUserProfile}
-                onSwitchUser={handleSwitchUser}
-                onClearChats={handleClearChats}
-              />
-            }
-          />
-        </Routes>
+        <Suspense fallback={routeFallback}>
+          <Routes>
+            <Route path="/" element={<MessagesPage language={language} characters={characters} />} />
+            <Route
+              path="/chat/:id"
+              element={
+                <ChatPage
+                  language={language}
+                  characters={characters}
+                  userId={authUser.id}
+                  onUpdateBond={updateBond}
+                  onMarkChatRead={markChatRead}
+                  onConversationMeta={updateConversationMeta}
+                />
+              }
+            />
+            <Route
+              path="/contacts"
+              element={
+                <ContactsPage
+                  language={language}
+                  characters={characters}
+                  onEnterRefreshOnline={refreshOnlineStatus}
+                />
+              }
+            />
+            <Route
+              path="/discover"
+              element={
+                <DiscoverPage
+                  language={language}
+                  userId={authUser.id}
+                  userProfile={userProfile}
+                  characters={characters}
+                  onUnreadCountChange={setDiscoverUnreadCount}
+                />
+              }
+            />
+            <Route
+              path="/me"
+              element={
+                <MePage
+                  language={language}
+                  setLanguage={setLanguage}
+                  characters={characters}
+                  userId={authUser.id}
+                  userProfile={userProfile}
+                  onUserProfileChange={setUserProfile}
+                  onSwitchUser={handleSwitchUser}
+                  onClearChats={handleClearChats}
+                />
+              }
+            />
+          </Routes>
+        </Suspense>
         
         {/* Only show BottomNav on main pages, not chat */}
         <Routes>
