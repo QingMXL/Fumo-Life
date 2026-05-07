@@ -1,3 +1,4 @@
+import { clearDiscoverCommentReadBaseline } from '@/lib/discoverCommentReadBaseline';
 import { clearChatMirrorsForUser } from '@/lib/chatLocalMirror';
 import { clearAllAiRecentCaches } from '@/services/gemini';
 
@@ -25,6 +26,7 @@ export function clearLocalSessionArtifacts(userId: string | null) {
   removeLocalStorageKeyPrefix('fumo-moment-reply-last:');
   if (userId) {
     clearChatMirrorsForUser(userId);
+    clearDiscoverCommentReadBaseline(userId);
     try {
       localStorage.removeItem(`${CHAT_CLEARED_KEY_PREFIX}${userId}`);
     } catch {

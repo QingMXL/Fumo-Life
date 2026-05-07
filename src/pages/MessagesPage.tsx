@@ -35,6 +35,14 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ language, characters
     }, 120);
   };
 
+  const previewText = (fumo: (typeof characters)[0]) => {
+    const lm = fumo.lastMessage;
+    if (!lm) return '';
+    const cur = lm[language]?.trim();
+    if (cur) return cur;
+    return lm.zh?.trim() || lm.ja?.trim() || lm.en?.trim() || '';
+  };
+
   const filteredCharacters = characters
     .filter(fumo => fumo.name[language].toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
@@ -90,9 +98,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ language, characters
                     <span className="shrink-0 text-[11px] font-bold text-cream-text/45">{fumo.lastTime}</span>
                   </div>
                   <div className="mt-0.5 flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-medium text-cream-text/65">
-                      {fumo.lastMessage?.[language] ?? ''}
-                    </p>
+                    <p className="truncate text-sm font-medium text-cream-text/65">{previewText(fumo)}</p>
                     {fumo.unreadCount > 0 && (
                       <span className="shrink-0 rounded-full bg-[#ff5a5a] px-2 py-0.5 text-center text-[10px] font-black text-white fumo-shadow ring-2 ring-white">
                         {fumo.unreadCount}

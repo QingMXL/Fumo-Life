@@ -40,24 +40,34 @@ export function saveChatMirror(userId: string, characterId: string, messages: Me
   }
 }
 
-/** 云端为主；本地仅补齐尚未同步成功的 tmp-* 或离线期间消息。 */
+function isFuzzyDup(a: Message, b: Message, windowMs: number) {
+  return (
+    a.sender === b.sender &&
+    (a.text ?? '') === (b.text ?? '') &&
+    (a.imageUrl ?? '') === (b.imageUrl ?? '') &&
+    Math.abs(a.timestamp.getTime() - b.timestamp.getTime()) < windowMs
+  );
+}
+
+/**
+ * 合并云端与本地镜像：按 id 并集，同一 id 以云端为准；本地独有的行若与云端某条在内容与时间上高度重合则丢弃（防 tmp/UUID 双份）。
+ * 解决：仅合并 tmp-* 时，若角色消息已带 UUID 只存在镜像里、云端尚未返回，会被误丢。
+ */
 export function mergeChatMirrorWithCloud(cloud: Message[], local: Message[]): Message[] {
-  if (cloud.length === 0) {
-    return local.length > 0 ? local : [];
+  const byId = new Map<string, Message>();
+  for (const m of cloud) {
+    byId.set(m.id, m);
   }
-  const out = [...cloud];
   for (const m of local) {
-    if (!m.id.startsWith('tmp-')) continue;
-    const dup = cloud.some(
-      c =>
-        c.sender === m.sender &&
-        (c.text ?? '') === (m.text ?? '') &&
-        (c.imageUrl ?? '') === (m.imageUrl ?? '') &&
-        Math.abs(c.timestamp.getTime() - m.timestamp.getTime()) < 12_000
-    );
-    if (!dup) out.push(m);
+    if (byId.has(m.id)) continue;
+    // 仅对未落库的 tmp 做模糊去重；已带真实 id 的本地行一律保留，避免多条合法回复被当成重复丢掉。
+    if (m.id.startsWith('tmp-')) {
+      const dup = [...byId.values()].some(c => isFuzzyDup(c, m, 25_000));
+      if (dup) continue;
+    }
+    byId.set(m.id, m);
   }
-  return out.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  return [...byId.values()].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 }
 
 export function clearChatMirrorsForUser(userId: string) {

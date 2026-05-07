@@ -11,16 +11,23 @@ const DiscoverPage = lazy(() => import('./pages/DiscoverPage').then(m => ({ defa
 const MePage = lazy(() => import('./pages/MePage').then(m => ({ default: m.MePage })));
 import { type AppUser, logout, restoreAuthUser } from './services/auth';
 import { clearChatMirrorsForUser } from '@/lib/chatLocalMirror';
+import {
+  computeDiscoverUnreadCommentTotal,
+  loadDiscoverCommentReadBaseline,
+  saveDiscoverCommentReadBaseline,
+} from '@/lib/discoverCommentReadBaseline';
 import { clearLocalSessionArtifacts } from '@/lib/sessionCleanup';
 import {
   clearUserMessages,
   createCharacterMoment,
+  fetchMomentsFeed,
   insertMessage,
   loadBonds,
   loadUnreadStates,
   mapPreviewByLanguage,
   purgeUserCloudContent,
   saveUnreadState,
+  subscribeMomentsRefresh,
   upsertBond,
   updateCloudUserProfile,
   withCharacterCloudState,
@@ -169,13 +176,18 @@ export default function App() {
   const markChatRead = useCallback((id: string) => {
     setCharacters(prev => {
       const c = prev.find(it => it.id === id);
+      const seed = INITIAL_CHARACTERS.find(it => it.id === id);
       if (authUser && c) {
+        const zh = c.lastMessage?.zh || seed?.lastMessage?.zh || '';
+        const ja = c.lastMessage?.ja || seed?.lastMessage?.ja || '';
+        const en = c.lastMessage?.en || seed?.lastMessage?.en || '';
+        const at = c.lastMessageAt ?? seed?.lastMessageAt ?? Date.now();
         void saveUnreadState(authUser.id, id, {
           unreadCount: 0,
-          lastMessageZh: c.lastMessage?.zh ?? '',
-          lastMessageJa: c.lastMessage?.ja ?? '',
-          lastMessageEn: c.lastMessage?.en ?? '',
-          lastMessageAt: c.lastMessageAt,
+          lastMessageZh: zh,
+          lastMessageJa: ja,
+          lastMessageEn: en,
+          lastMessageAt: at,
         });
       }
       return prev.map(ch => (ch.id === id ? { ...ch, unreadCount: 0 } : ch));
@@ -221,11 +233,10 @@ export default function App() {
           return {
             ...c,
             lastMessage: {
-              zh: c.lastMessage?.zh ?? lastText,
-              ja: c.lastMessage?.ja ?? lastText,
-              en: c.lastMessage?.en ?? lastText,
-              [language]: lastText,
-            } as any,
+              zh: language === 'zh' ? lastText : (c.lastMessage?.zh ?? ''),
+              ja: language === 'ja' ? lastText : (c.lastMessage?.ja ?? ''),
+              en: language === 'en' ? lastText : (c.lastMessage?.en ?? ''),
+            },
             lastMessageAt: at,
             lastTime: formatHHMM(at),
             unreadCount: opts?.incrementUnread ? (c.unreadCount ?? 0) + 1 : c.unreadCount,
@@ -244,6 +255,34 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(DISCOVER_UNREAD_KEY, String(discoverUnreadCount));
   }, [discoverUnreadCount]);
+
+  /** 任意 Tab 下更新「发现」角标：拉取本人动态上的角色新评论数（与 Discover 内已读基线一致）。 */
+  useEffect(() => {
+    if (!authUser) return;
+    let alive = true;
+    const refreshDiscoverUnread = async () => {
+      try {
+        const { moments } = await fetchMomentsFeed(authUser.id);
+        if (!alive) return;
+        const baseline = { ...loadDiscoverCommentReadBaseline(authUser.id) };
+        const total = computeDiscoverUnreadCommentTotal(moments, baseline);
+        saveDiscoverCommentReadBaseline(authUser.id, baseline);
+        setDiscoverUnreadCount(total);
+      } catch {
+        /* 离线或 Supabase 不可用时保留上次角标 */
+      }
+    };
+    void refreshDiscoverUnread();
+    const unsub = subscribeMomentsRefresh(() => {
+      void refreshDiscoverUnread();
+    });
+    const interval = window.setInterval(() => void refreshDiscoverUnread(), 35_000);
+    return () => {
+      alive = false;
+      unsub();
+      window.clearInterval(interval);
+    };
+  }, [authUser]);
 
   useEffect(() => {
     // Bond decay: small random drift down, only if not interacted recently.

@@ -645,15 +645,21 @@ export async function fetchMomentsFeed(userId: string) {
   }
   if (mErr) throw mErr;
   const allRaw = (momentsRaw ?? []) as MomentRow[];
-  const momentRows = dedupeMomentRowsByContent(allRaw);
-  const idCanon = buildMomentIdToCanonical(allRaw, momentRows);
+  /** 账号隔离：角色动态全员可见；用户动态仅本人可见（避免 A 账号刷到 B 账号如「神社客」的投稿）。 */
+  const scopedRaw = allRaw.filter(
+    r =>
+      r.author_type === 'character' ||
+      (r.author_type === 'user' && r.user_id != null && r.user_id === userId)
+  );
+  const momentRows = dedupeMomentRowsByContent(scopedRaw);
+  const idCanon = buildMomentIdToCanonical(scopedRaw, momentRows);
 
-  if (momentRows.length > 0) await ensureNpcCrossLikesForFeed(momentRows, allRaw, idCanon);
+  if (momentRows.length > 0) await ensureNpcCrossLikesForFeed(momentRows, scopedRaw, idCanon);
 
   const ids = momentRows.map(m => m.id);
   if (ids.length === 0) return { moments: [] as Moment[], likedMomentIds: new Set<string>() };
 
-  const allIds = [...new Set(allRaw.map(m => m.id))];
+  const allIds = [...new Set(scopedRaw.map(m => m.id))];
   const fetchIds = allIds.length > 0 ? allIds : ids;
 
   const [commentsRes, likesRes, charLikesRes] = await Promise.all([
@@ -797,7 +803,8 @@ export interface AlbumImageItem {
   id: string;
   imageUrl: string;
   createdAt: string;
-  source: 'user_moment' | 'ai_chat' | 'discover_moment';
+  /** 仅发现页角色配图：种子图 + 云端角色动态配图（不含用户发动态、不含聊天图）。 */
+  source: 'discover_moment' | 'character_moment';
 }
 
 function mergeAlbumDedupeByUrl(items: AlbumImageItem[]): AlbumImageItem[] {
@@ -813,8 +820,8 @@ function mergeAlbumDedupeByUrl(items: AlbumImageItem[]): AlbumImageItem[] {
   return [...byUrl.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-/** 我的相册：发现页角色种子配图 + 用户动态配图 + AI 聊天配图。 */
-export async function fetchMyAlbumImages(userId: string): Promise<AlbumImageItem[]> {
+/** 我的相册：仅发现页「角色」配图（本地种子 + 云端角色动态），不含用户发动态、不含聊天配图。 */
+export async function fetchMyAlbumImages(_userId: string): Promise<AlbumImageItem[]> {
   const seedItems: AlbumImageItem[] = getDiscoverSeedAlbumEntries().map(r => ({
     id: r.id,
     imageUrl: r.imageUrl,
@@ -824,39 +831,26 @@ export async function fetchMyAlbumImages(userId: string): Promise<AlbumImageItem
 
   if (!isSupabaseReady()) return mergeAlbumDedupeByUrl(seedItems);
   try {
-    const [momentsRes, chatRes] = await Promise.all([
-      supabase
-        .from('moments')
-        .select('id, image_url, created_at')
-        .eq('author_type', 'user')
-        .eq('user_id', userId)
-        .not('image_url', 'is', null)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('messages')
-        .select('id, image_url, created_at')
-        .eq('user_id', userId)
-        .eq('sender', 'fumo')
-        .not('image_url', 'is', null)
-        .order('created_at', { ascending: false }),
-    ]);
-    if (momentsRes.error) throw momentsRes.error;
-    if (chatRes.error) throw chatRes.error;
+    const { data, error } = await supabase
+      .from('moments')
+      .select('id, image_url, created_at')
+      .eq('author_type', 'character')
+      .not('image_url', 'is', null)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
 
-    const cloudItems: AlbumImageItem[] = [
-      ...((momentsRes.data ?? []) as Array<{ id: string; image_url: string | null; created_at: string }>).map(r => ({
-        id: `m-${r.id}`,
-        imageUrl: r.image_url ?? '',
+    const nonEmptyUrl = (u: string | null | undefined) => Boolean(u && String(u).trim());
+
+    const cloudItems: AlbumImageItem[] = (
+      (data ?? []) as Array<{ id: string; image_url: string | null; created_at: string }>
+    )
+      .filter(r => nonEmptyUrl(r.image_url))
+      .map(r => ({
+        id: `cm-${r.id}`,
+        imageUrl: r.image_url!.trim(),
         createdAt: r.created_at,
-        source: 'user_moment' as const,
-      })),
-      ...((chatRes.data ?? []) as Array<{ id: string; image_url: string | null; created_at: string }>).map(r => ({
-        id: `c-${r.id}`,
-        imageUrl: r.image_url ?? '',
-        createdAt: r.created_at,
-        source: 'ai_chat' as const,
-      })),
-    ].filter(it => Boolean(it.imageUrl));
+        source: 'character_moment' as const,
+      }));
 
     return mergeAlbumDedupeByUrl([...seedItems, ...cloudItems]);
   } catch (e) {
@@ -1016,6 +1010,11 @@ export function subscribeMomentsRefresh(onRefresh: () => void): Unsub {
   };
 }
 
+function coalescePreviewLane(saved: string | null | undefined, fallback: string | undefined) {
+  const s = saved?.trim() ?? '';
+  return s || (fallback?.trim() ?? '');
+}
+
 export function withCharacterCloudState(
   characters: Character[],
   unreadMap: Map<string, UnreadRow>,
@@ -1030,9 +1029,9 @@ export function withCharacterCloudState(
       unreadCount: unread?.unread_count ?? c.unreadCount,
       lastMessage: unread
         ? {
-            zh: unread.last_message_zh ?? c.lastMessage?.zh ?? '',
-            ja: unread.last_message_ja ?? c.lastMessage?.ja ?? '',
-            en: unread.last_message_en ?? c.lastMessage?.en ?? '',
+            zh: coalescePreviewLane(unread.last_message_zh, c.lastMessage?.zh),
+            ja: coalescePreviewLane(unread.last_message_ja, c.lastMessage?.ja),
+            en: coalescePreviewLane(unread.last_message_en, c.lastMessage?.en),
           }
         : c.lastMessage,
       lastMessageAt: at,

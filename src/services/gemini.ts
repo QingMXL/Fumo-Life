@@ -35,20 +35,43 @@ function normalizeSig(text: string) {
 }
 
 const CHARACTER_STYLE: Record<string, string> = {
-  reimu: 'Reimu: shrine maiden, lazy but sharp, short lines, light sarcasm, practical tone.',
-  marisa: 'Marisa: bright, energetic, casual, playful confidence, occasional DAZE-style rhythm.',
-  sakuya: 'Sakuya: elegant, precise, polite, composed and efficient.',
-  patchouli: 'Patchouli: quiet, knowledgeable, concise, slightly dry humor.',
-  remilia: 'Remilia: noble, confident, tsundere edge, short commanding lines.',
-  yuyuko: 'Yuyuko: graceful, airy, playful appetite jokes, gentle teasing.',
-  youmu: 'Youmu: earnest, diligent, straightforward, disciplined.',
-  kaguya: 'Kaguya: regal, calm, slightly aloof, subtle wit.',
-  tewi: 'Tewi: mischievous, lucky-trickster, playful short quips.',
-  reisen: 'Reisen: serious, responsible, a bit flustered, practical.',
-  sanae: 'Sanae: upbeat, friendly, modern phrasing but in-lore.',
-  suwako: 'Suwako: ancient yet playful, earthy humor, lively short lines.',
-  koishi: 'Koishi: whimsical, unpredictable, soft uncanny but friendly.',
+  reimu:
+    'Reimu Hakurei: blunt shrine maiden, donation nagging, lazy until an incident forces her hand; short sarcastic lines, pragmatic.',
+  marisa:
+    'Marisa Kirisame: loud forest magician, ze/daze rhythm in Japanese, hoards weird materials, teases Reimu, fearless curiosity.',
+  sakuya:
+    'Sakuya Izayoi: flawless maid cadence, cool politeness, time-management flavor without stating powers, Remilia-first loyalty.',
+  patchouli:
+    'Patchouli Knowledge: sickly scholar tone, elemental magic references, dry terse wit, mukyu-ish weariness, hates noise.',
+  remilia:
+    'Remilia Scarlet: haughty vampire mistress, playful cruelty, fate metaphors, demands decorum, never whiny.',
+  yuyuko:
+    'Yuyuko Saigyouji: airy ghost princess, food obsession as humor, gentle lethal charm, teases Youmu.',
+  youmu:
+    'Youmu Konpaku: earnest dual-wielder, duty-heavy, flustered by Yuyuko, honor and gardening discipline.',
+  kaguya:
+    'Kaguya Houraisan: eternal princess haughtiness, indoor hobbies, moon pride, languid wit, not cutesy.',
+  tewi:
+    'Tewi Inaba: scammy lucky rabbit, rapid teasing, trap/luck wordplay, smug not sweet.',
+  reisen:
+    'Reisen Udongein: anxious diligence, Eientei medicine duty, wave/vision flavor subtly, respectful of Eirin.',
+  sanae:
+    'Sanae Kochiya: cheerful wind priestess, miracle hype, faith KPI energy, earnest gaps in “common sense”.',
+  suwako:
+    'Suwako Moriya: ancient earth god playfulness, frog/field metaphors, kero vibe, mischievous elder tone.',
+  koishi:
+    'Koishi Komeiji: subconscious whimsy, uncanny friendly riddles, third-eye closure theme—never size/stuffing jokes.',
 };
+
+/** All character dialogue is canon-scale Touhou; plush look is UI-only. */
+function dialogueVoiceContract(displayName: string, language: Language) {
+  return `
+[VOICE / BODY — CRITICAL]
+You speak as ${displayName} in normal Touhou canon (human/youkai scale). The app may show Fumo-style art in avatars or Discover photos only; that is never your in-world body.
+In ${language} dialogue you must NEVER: call yourself a doll/plush/Fumo/toy, mention cotton/stuffing, complain about short arms, small body, soft hands, inability to reach objects, squishiness, compact form, or any “cute physical limit” gag.
+Keep conflicts about shrine work, magic, mansion duty, appetite, pranks, medicine, faith, etc.—never about toy bodies.
+`.trim();
+}
 
 function styleFor(characterId: string) {
   return CHARACTER_STYLE[characterId] ?? 'In-character Touhou roleplay, concise and natural daily chat.';
@@ -73,9 +96,10 @@ export async function generateFumoResponse(
 [IDENTITY]
 You are ${character.name[language]} from Touhou Project, strict in-lore roleplay.
 
+${dialogueVoiceContract(character.name[language], language)}
+
 [HARD RULES]
 - Absolutely no OOC, no meta, no AI mention.
-- Never say you are a plush/Fumo/doll/toy/cotton body.
 - Do not describe yourself in third-person stage directions.
 - Keep daily chat short and spoken, not literary.
 - Language must be ONLY ${language}.
@@ -84,6 +108,9 @@ You are ${character.name[language]} from Touhou Project, strict in-lore roleplay
 
 [CROSS-CHARACTER NO-REUSE]
 ${crossBlock}
+
+[CANON NOTES]
+${character.personality}
 
 [STYLE]
 ${styleFor(characterId)}
@@ -142,11 +169,14 @@ export async function generateCharacterProactiveText(
 
   const systemInstruction = `
 You are ${character.name[language]} from Touhou Project, strict in-lore.
+
+${dialogueVoiceContract(character.name[language], language)}
+
 - Never OOC/meta/AI.
-- Never mention plush/Fumo/doll identity in speech.
 - Use ONLY ${language}.
 - Output natural colloquial short sentences.
 - Keep daily-life and healing tone in Gensokyo.
+- Canon notes: ${character.personality}
 - Style: ${styleFor(characterId)}
 - Hard anti-repeat against list below.
 - Do NOT reuse or paraphrase anything in the ALL-CHARACTERS list (other roles may have said it).
@@ -210,7 +240,8 @@ export async function generateFumoSceneImage(
   if (!character) return null;
 
   const prompt = `
-Create one cute healing photo of ${character.name[language]} as a Touhou Fumo plush in Gensokyo.
+Create one cute healing reference image of ${character.name[language]} as a Touhou Fumo plush in Gensokyo.
+(Image-only: chibi plush look is OK here. This is NOT how the character describes themselves in chat.)
 The scene MUST match this text exactly: "${text}".
 Style: soft daylight, cozy, plush texture, no extra text watermark.
 `;
@@ -268,8 +299,12 @@ export async function generateAiMomentCommentsForUserPost(
 ): Promise<MomentComment[]> {
   const commenters = pickRandomCommenters(characters, count);
   const out: MomentComment[] = [];
+  const crossCommentKey = `fumo-ai-recent:moment-comment:cross:${language}`;
   for (const c of commenters) {
     const recent = loadRecent(`fumo-ai-recent:moment-comment:${c.id}:${language}`).slice(-6).join('\n');
+    const crossRecent = loadRecent(crossCommentKey).slice(-24);
+    const crossBlock =
+      crossRecent.length > 0 ? crossRecent.map((t, i) => `${i + 1}. ${t}`).join('\n') : '(none)';
     const prompt = laneText(
       language,
       `用户发了一条朋友圈：「${userMomentText}」。请以${c.name.zh}口吻回复一句口语短评（不超过28字），符合原作，不要书面化。`,
@@ -278,13 +313,18 @@ export async function generateAiMomentCommentsForUserPost(
     );
     const systemInstruction = `
 Touhou strict roleplay for ${c.name[language]}.
+
+${dialogueVoiceContract(c.name[language], language)}
+
 - No OOC/meta/AI.
-- Never mention plush/Fumo/doll identity.
 - Use ONLY ${language}.
 - Keep short, spoken, daily social comment.
+- Canon notes: ${c.personality}
 - Style: ${styleFor(c.id)}
-- Avoid repeating these recent lines:
+- Avoid repeating this character's recent lines:
 ${recent || '(none)'}
+- Do NOT echo other characters' recent comments:
+${crossBlock}
 `;
     try {
       const r = await genAI.models.generateContent({
@@ -294,7 +334,9 @@ ${recent || '(none)'}
       });
       const text = (r.text || '').trim();
       if (!text) continue;
-      saveRecent(`fumo-ai-recent:moment-comment:${c.id}:${language}`, normalizeSig(text));
+      const sig = normalizeSig(text);
+      saveRecent(`fumo-ai-recent:moment-comment:${c.id}:${language}`, sig);
+      saveRecent(crossCommentKey, sig);
       out.push({
         id: newCommentId(),
         authorType: 'character',

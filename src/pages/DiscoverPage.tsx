@@ -11,6 +11,10 @@ import { Heart, MessageCircle, Download, Plus, Camera, X, Trash2 } from 'lucide-
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { fileOrBlobUrlToJpegDataUrl } from '@/lib/imageDataUrl';
+import {
+  loadDiscoverCommentReadBaseline,
+  saveDiscoverCommentReadBaseline,
+} from '@/lib/discoverCommentReadBaseline';
 import { cn, resolvePublicAssetUrl } from '@/lib/utils';
 import { buildEngagementForUserPost } from '@/data/momentNpcReplies';
 import { CHARACTER_SEED_MOMENTS } from '@/data/characterSeedMoments';
@@ -113,6 +117,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
   useEffect(() => {
     let alive = true;
     setFeedHydrateAt(null);
+    setMoments([]);
     (async () => {
       await ensureSeedCharacterMoments(CHARACTER_SEED_MOMENTS);
       if (!alive) return;
@@ -137,6 +142,21 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
   const readBaseline = useRef<Record<string, { characterCommentsRead: number }>>({});
   const [readTick, setReadTick] = useState(0);
 
+  const persistReadBaseline = () => {
+    const flat: Record<string, number> = {};
+    for (const [k, v] of Object.entries(readBaseline.current)) {
+      flat[k] = v.characterCommentsRead;
+    }
+    saveDiscoverCommentReadBaseline(userId, flat);
+  };
+
+  useEffect(() => {
+    const flat = loadDiscoverCommentReadBaseline(userId);
+    readBaseline.current = Object.fromEntries(
+      Object.entries(flat).map(([id, n]) => [id, { characterCommentsRead: n }])
+    );
+  }, [userId]);
+
   useEffect(() => {
     let changed = false;
     moments.forEach(m => {
@@ -149,11 +169,15 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
         changed = true;
       }
     });
-    if (changed) setReadTick(t => t + 1);
-  }, [moments]);
+    if (changed) {
+      persistReadBaseline();
+      setReadTick(t => t + 1);
+    }
+  }, [moments, userId]);
 
   const markMomentRead = (momentId: string, currentCharacterComments: number) => {
     readBaseline.current[momentId] = { characterCommentsRead: currentCharacterComments };
+    persistReadBaseline();
     setReadTick(x => x + 1);
   };
 
@@ -166,21 +190,16 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     return Math.max(0, now - read);
   };
 
-  const unreadMomentsCount = useMemo(
-    () => moments.filter(m => getMomentUnreadCharacterComments(m) > 0).length,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [moments, readTick]
-  );
-
-  useEffect(() => {
-    onUnreadCountChange(unreadMomentsCount);
-  }, [onUnreadCountChange, unreadMomentsCount]);
-
   const unreadCommentsTotal = useMemo(
     () => moments.reduce((acc, m) => acc + getMomentUnreadCharacterComments(m), 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [moments, readTick]
   );
+
+  /** 底部导航「发现」角标：未读「角色评论」条数（非未读动态条数）。 */
+  useEffect(() => {
+    onUnreadCountChange(unreadCommentsTotal);
+  }, [onUnreadCountChange, unreadCommentsTotal]);
 
   const unreadCommentsLabel =
     language === 'zh' ? '未读评论' : language === 'ja' ? '未読コメント' : 'Unread';

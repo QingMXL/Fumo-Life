@@ -21,25 +21,6 @@ import {
 
 const CHAT_CLEARED_KEY_PREFIX = 'fumo-chat-cleared-at:';
 
-function normalizeChat(msgs: Message[]) {
-  // Collapse adjacent identical fumo texts (fixes old cached spam / ABAB loops).
-  const out: Message[] = [];
-  for (const m of msgs) {
-    const prev = out[out.length - 1];
-    if (
-      prev &&
-      prev.sender === 'fumo' &&
-      m.sender === 'fumo' &&
-      prev.text.trim() === m.text.trim() &&
-      prev.imageUrl === m.imageUrl
-    ) {
-      continue;
-    }
-    out.push(m);
-  }
-  return out;
-}
-
 /** Staggered unread bubbles when opening a thread with no local history. */
 function buildUnreadSeed(fumo: Character, lang: Language): Message[] {
   const n = Math.min(Math.max(fumo.unreadCount, 0), 5);
@@ -128,7 +109,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [menuMessage, setMenuMessage] = useState<Message | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const mirrorSaveTimerRef = useRef<number | null>(null);
+  /** 始终指向当前渲染的 messages，供卸载/切会话时立刻落盘镜像（避免仅依赖防抖被取消）。 */
+  const messagesRef = useRef<Message[]>(messages);
+  messagesRef.current = messages;
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  /** 有任意展示行即落盘，便于无云端历史时也能反复进入看到同一段开场/未读占位。 */
+  const shouldPersistMirror = (msgs: Message[]) => msgs.length > 0;
 
   const messageEnterAnimate = (msg: Message) =>
     hydrateAt != null &&
@@ -162,7 +149,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         setMessages(batch);
         setHydrateAt(t);
       };
-      const merged = normalizeChat(mergeChatMirrorWithCloud(cloud, localMirror));
+      // 不在此处做相邻折叠：会误删合法连续消息；仅保留 merge 后的完整时间线。
+      const merged = mergeChatMirrorWithCloud(cloud, localMirror);
       if (merged.length > 0) {
         markHydrated(merged);
         saveChatMirror(userId, fumo.id, merged);
@@ -207,18 +195,40 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
   useEffect(() => {
     if (!fumo) return;
-    const hasReal = messages.some(
-      m => !m.id.startsWith('unread-') && !m.id.startsWith('starter-')
-    );
-    if (!hasReal) return;
+    const uid = userId;
+    const cid = fumo.id;
+    const flushMirror = () => {
+      const latest = messagesRef.current;
+      if (!shouldPersistMirror(latest)) return;
+      saveChatMirror(uid, cid, latest);
+    };
+    if (!shouldPersistMirror(messages)) return;
     if (mirrorSaveTimerRef.current != null) window.clearTimeout(mirrorSaveTimerRef.current);
-    mirrorSaveTimerRef.current = window.setTimeout(() => {
-      saveChatMirror(userId, fumo.id, messages);
-    }, 450);
+    mirrorSaveTimerRef.current = window.setTimeout(flushMirror, 200);
     return () => {
       if (mirrorSaveTimerRef.current != null) window.clearTimeout(mirrorSaveTimerRef.current);
+      flushMirror();
     };
   }, [messages, fumo?.id, userId]);
+
+  useEffect(() => {
+    if (!fumo) return;
+    const uid = userId;
+    const cid = fumo.id;
+    const flush = () => {
+      const latest = messagesRef.current;
+      if (shouldPersistMirror(latest)) saveChatMirror(uid, cid, latest);
+    };
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [fumo?.id, userId]);
 
   useEffect(() => {
     if (scrollRef.current) {
