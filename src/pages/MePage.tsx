@@ -3,6 +3,7 @@ import { type Language, type Character, type UserProfile } from '@/types';
 import { Settings, Camera, Heart, Globe, Bell, Shield, X, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchMyAlbumImages, type AlbumImageItem } from '@/services/cloudStore';
+import { resolvePublicAssetUrl } from '@/lib/utils';
 
 interface MePageProps {
   language: Language;
@@ -77,7 +78,7 @@ export const MePage: React.FC<MePageProps> = ({
         <div className="relative mb-4">
           <div className="w-24 h-24 rounded-full bg-cream-accent/20 stitched-border flex items-center justify-center overflow-hidden">
             <img 
-              src={userProfile.avatarUrl} 
+              src={resolvePublicAssetUrl(userProfile.avatarUrl) ?? userProfile.avatarUrl} 
               className="w-full h-full object-cover" 
               alt="User"
               referrerPolicy="no-referrer"
@@ -304,7 +305,7 @@ export const MePage: React.FC<MePageProps> = ({
                     onClick={() => setPreviewImage(item.imageUrl)}
                     className="aspect-square rounded-2xl overflow-hidden stitched-border border-dashed"
                   >
-                    <img src={item.imageUrl} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                    <img src={resolvePublicAssetUrl(item.imageUrl) ?? item.imageUrl} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
                   </button>
                 ))
               )}
@@ -320,7 +321,7 @@ export const MePage: React.FC<MePageProps> = ({
             onClick={() => setPreviewImage(null)}
           >
             <img
-              src={previewImage}
+              src={resolvePublicAssetUrl(previewImage) ?? previewImage ?? ''}
               className="max-w-full max-h-full rounded-2xl stitched-border border-white"
               alt=""
               referrerPolicy="no-referrer"

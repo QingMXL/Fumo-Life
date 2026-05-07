@@ -157,7 +157,7 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '満月前夜の紅茶は濃いめがいいわ。窓の雲にふさわしくなるから。',
       en: 'The night before full moon calls for stronger black tea—it suits the clouds outside.',
     },
-    imageUrl: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=800',
+    imageUrl: '/moments/remilia-moment.png',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 18),
     likes: 67,
     comments: [

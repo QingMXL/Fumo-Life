@@ -10,7 +10,7 @@ import {
 import { Heart, MessageCircle, Download, Plus, Camera, X, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '@/lib/utils';
+import { cn, resolvePublicAssetUrl } from '@/lib/utils';
 import { buildEngagementForUserPost } from '@/data/momentNpcReplies';
 import { CHARACTER_SEED_MOMENTS } from '@/data/characterSeedMoments';
 import { generateAiMomentCommentsForUserPost } from '@/services/gemini';
@@ -41,11 +41,12 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 async function downloadMomentImage(url: string, filenameBase: string) {
+  const fetchUrl = resolvePublicAssetUrl(url) ?? url;
   const ext = url.startsWith('data:image/')
     ? (url.match(/^data:image\/(\w+)/)?.[1] ?? 'png')
     : (() => {
         try {
-          const u = new URL(url, window.location.href);
+          const u = new URL(fetchUrl, window.location.href);
           const m = u.pathname.match(/\.([a-zA-Z0-9]+)$/);
           return m?.[1]?.toLowerCase() ?? 'png';
         } catch {
@@ -55,7 +56,7 @@ async function downloadMomentImage(url: string, filenameBase: string) {
   const safe = filenameBase.replace(/[^\w.-]+/g, '_').slice(0, 80) || 'moment';
   const filename = `${safe}.${ext}`;
   try {
-    const res = await fetch(url);
+    const res = await fetch(fetchUrl);
     if (!res.ok) throw new Error(String(res.status));
     const blob = await res.blob();
     const a = document.createElement('a');
@@ -66,7 +67,7 @@ async function downloadMomentImage(url: string, filenameBase: string) {
     URL.revokeObjectURL(a.href);
   } catch {
     const a = document.createElement('a');
-    a.href = url;
+    a.href = fetchUrl;
     a.download = filename;
     a.target = '_blank';
     a.rel = 'noopener';
@@ -343,7 +344,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
       const inner = (
         <div className="flex gap-2 min-w-0 flex-1">
           <img
-            src={avatar}
+            src={resolvePublicAssetUrl(avatar) ?? avatar}
             className="w-7 h-7 rounded-full border border-white shrink-0 object-cover"
             alt=""
             referrerPolicy="no-referrer"
@@ -386,7 +387,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
     const inner = (
       <div className="flex gap-2 min-w-0 flex-1">
         <img
-          src={commenter?.avatar}
+          src={resolvePublicAssetUrl(commenter?.avatar) ?? commenter?.avatar}
           className="w-7 h-7 rounded-full border border-white shrink-0 object-cover"
           alt=""
           referrerPolicy="no-referrer"
@@ -487,7 +488,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
                 }
               >
                 <img
-                  src={posterAvatar}
+                  src={resolvePublicAssetUrl(posterAvatar) ?? posterAvatar}
                   className="w-10 h-10 rounded-full border-2 border-white fumo-shadow object-cover"
                   alt=""
                   referrerPolicy="no-referrer"
@@ -512,7 +513,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
 
               {moment.imageUrl ? (
                 <img
-                  src={moment.imageUrl}
+                  src={resolvePublicAssetUrl(moment.imageUrl) ?? moment.imageUrl}
                   className="w-full h-64 object-cover border-y-2 border-cream-border border-dashed"
                   alt="Moment"
                   referrerPolicy="no-referrer"
@@ -553,7 +554,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
                         return (
                           <img
                             key={`${moment.id}-${cid}`}
-                            src={ch?.avatar}
+                            src={resolvePublicAssetUrl(ch?.avatar) ?? ch?.avatar}
                             alt=""
                             className="w-7 h-7 rounded-full border-2 border-white object-cover fumo-shadow"
                             referrerPolicy="no-referrer"

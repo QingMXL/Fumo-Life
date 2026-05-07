@@ -3,6 +3,7 @@ import { type Language, type Character } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { motion } from 'motion/react';
+import { resolvePublicAssetUrl } from '@/lib/utils';
 
 interface MessagesPageProps {
   language: Language;
@@ -75,7 +76,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ language, characters
             <div className="flex items-center gap-4">
               <div className="relative">
                 <img
-                  src={fumo.avatar}
+                  src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar}
                   alt={fumo.name[language]}
                   className="w-16 h-16 rounded-full object-cover border-4 border-white fumo-shadow"
                   referrerPolicy="no-referrer"

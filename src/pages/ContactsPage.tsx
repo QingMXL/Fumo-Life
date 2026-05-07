@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { type Language, type Character } from '@/types';
 import { Heart, BookOpen, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { resolvePublicAssetUrl } from '@/lib/utils';
 
 const AFFILIATION_I18N: Record<string, { zh: string; ja: string; en: string }> = {
   'Hakurei Shrine': { zh: '博丽神社', ja: '博麗神社', en: 'Hakurei Shrine' },
@@ -55,7 +56,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ language, characters
                   className="stitched-card flex items-center gap-4 hover:translate-y-[-2px] transition-transform active:scale-95 block"
                 >
                   <div className="relative">
-                    <img src={fumo.avatar} className="w-14 h-14 rounded-full border-2 border-white fumo-shadow object-cover" alt="" />
+                    <img src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar} className="w-14 h-14 rounded-full border-2 border-white fumo-shadow object-cover" alt="" />
                     <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 border-2 border-white rounded-full ${fumo.isOnline ? 'bg-green-400' : 'bg-gray-300'}`} />
                   </div>
                   <div className="flex-1">

@@ -7,7 +7,7 @@ import {
   generateFumoSceneImage,
   shouldAttachAiImage,
 } from '@/services/gemini';
-import { cn } from '@/lib/utils';
+import { cn, resolvePublicAssetUrl } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   createCharacterMoment,
@@ -498,7 +498,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               onClick={e => e.stopPropagation()}
             >
               <div className="flex flex-col items-center text-center gap-4">
-                <img src={fumo.avatar} className="w-20 h-20 rounded-full border-4 border-white fumo-shadow" alt="" />
+                <img src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar} className="w-20 h-20 rounded-full border-4 border-white fumo-shadow" alt="" />
                 <div>
                   <h3 className="font-bold text-xl">{fumo.name[language]}</h3>
                   <p className="text-xs opacity-60 mt-1">{fumo.description[language]}</p>
@@ -588,7 +588,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           <ChevronLeft className="w-6 h-6" />
         </button>
         <div className="flex items-center gap-3">
-          <img src={fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white fumo-shadow" alt="" />
+          <img src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white fumo-shadow" alt="" />
           <div>
             <h2 className="font-bold leading-tight">{fumo.name[language]}</h2>
             <div className="flex items-center gap-1">
@@ -622,7 +622,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               onTouchCancel={clearLongPress}
             >
               {msg.sender === 'fumo' && (
-                <img src={fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white self-end mb-1 fumo-shadow object-cover" alt="" />
+                <img src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white self-end mb-1 fumo-shadow object-cover" alt="" />
               )}
               <div className={cn(
                 "p-3 rounded-2xl stitched-border text-sm leading-relaxed",
@@ -634,14 +634,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                 {msg.imageUrl && (
                   <button
                     type="button"
-                    onClick={() => window.open(msg.imageUrl, '_blank')}
+                    onClick={() => window.open(resolvePublicAssetUrl(msg.imageUrl) ?? msg.imageUrl, '_blank')}
                     className={cn(
                       "mt-2 block",
                       msg.sender === 'user' ? "ml-auto" : "mr-auto"
                     )}
                   >
                     <img 
-                      src={msg.imageUrl} 
+                      src={resolvePublicAssetUrl(msg.imageUrl) ?? msg.imageUrl} 
                       alt="Fumo Life" 
                       className="rounded-xl border-2 border-cream-border border-dashed w-[220px] max-w-[65vw] h-auto object-cover"
                       referrerPolicy="no-referrer"
@@ -664,7 +664,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         
         {isTyping && (
           <div className="flex gap-2 mr-auto">
-            <img src={fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white self-end mb-1 fumo-shadow object-cover" alt="" />
+            <img src={resolvePublicAssetUrl(fumo.avatar) ?? fumo.avatar} className="w-10 h-10 rounded-full border-2 border-white self-end mb-1 fumo-shadow object-cover" alt="" />
             <div className="bg-white p-3 rounded-2xl rounded-tl-none stitched-border flex gap-1">
               <span className="w-1.5 h-1.5 bg-cream-accent rounded-full animate-bounce" />
               <span className="w-1.5 h-1.5 bg-cream-accent rounded-full animate-bounce [animation-delay:0.2s]" />
