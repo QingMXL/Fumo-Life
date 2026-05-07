@@ -1,7 +1,13 @@
 import { type Moment } from '@/types';
 
-/** 预设角色朋友圈：每条 zh 文案唯一，便于云端指纹去重。 */
-export const CHARACTER_SEED_MOMENTS: Moment[] = [
+/**
+ * 预设角色朋友圈：每条 zh 文案唯一，便于云端指纹去重。
+ * 配图：把文件放到 public/moments/{种子 id}.png（与下方对象的 id 一致）。
+ * 打开「发现」时会自动把 Supabase 里同文案的行的 image_url 写成该路径，无需在 SQL Editor 里逐条改。
+ * 当前 id 列表：seed-reimu-1, seed-marisa-1, seed-sakuya-1, seed-patchouli-1, seed-remilia-1,
+ * seed-yuyuko-1, seed-youmu-1, seed-kaguya-1, seed-tewi-1, seed-reisen-1, seed-sanae-1, seed-suwako-1, seed-koishi-1
+ */
+const RAW_CHARACTER_SEED_MOMENTS: Moment[] = [
   {
     id: 'seed-reimu-1',
     authorType: 'character',
@@ -11,7 +17,6 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '今日も神社は暇ね。誰かお賽銭を入れに来てくれないかしら…（座布団に倒れ込む）',
       en: 'The shrine is quiet again today. I wish someone would come and donate... (*collapses on cushion*)',
     },
-    imageUrl: '/moments/reimu-shrine-moment.png',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
     likes: 24,
     comments: [
@@ -56,7 +61,6 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '魔法の森でキラキラしたキノコを見つけたぜ！これはきっとレアな素材だぜ！',
       en: 'Found a sparkly mushroom in the Forest of Magic! This must be a rare ingredient DAZE!',
     },
-    imageUrl: '/moments/marisa-magic-mushroom.png',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5),
     likes: 42,
     comments: [
@@ -91,7 +95,6 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: 'お嬢様の今日のお茶会は、紅茶と特製ケーキです。時を止めた瞬間、クリームの香りが一番引き立ちます。',
       en: "Mistress's afternoon tea today is black tea and special cupcakes. The cream smells best when time stops.",
     },
-    imageUrl: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?q=80&w=800',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 12),
     likes: 56,
     comments: [
@@ -122,7 +125,6 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '湿度がちょうどよくて占星術の復習に向くわ。黙読時間外は扉を強く叩かないで。',
       en: 'Humidity is perfect for rereading my ast primer. Don’t bang the door during quiet hours.',
     },
-    imageUrl: 'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?q=80&w=800&auto=format&fit=crop',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 30),
     likes: 31,
     comments: [
@@ -157,7 +159,6 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '満月前夜の紅茶は濃いめがいいわ。窓の雲にふさわしくなるから。',
       en: 'The night before full moon calls for stronger black tea—it suits the clouds outside.',
     },
-    imageUrl: '/moments/remilia-moment.png',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 18),
     likes: 67,
     comments: [
@@ -192,7 +193,6 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '今日の桜あんみつ……一個、足りない気がする？（にらむ）',
       en: 'Pretty sure we’re one sakura dumpling short today... (*stares*)',
     },
-    imageUrl: 'https://images.unsplash.com/photo-1526318472351-c75fcf070305?q=80&w=800',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 8),
     likes: 88,
     comments: [
@@ -227,7 +227,6 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '庭の灯籠を磨いた。抜刀の拍子に竹の葉を一枚……後で掃く。',
       en: 'Cleaned the stone lanterns. A flick of the blade took one bamboo leaf—I’ll sweep it.',
     },
-    imageUrl: 'https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?q=80&w=800',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 26),
     likes: 45,
     comments: [
@@ -296,7 +295,6 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '今日の竹林はトラップなし——なんてね、足元見てぴょん。',
       en: 'No traps in the bamboo today—kidding, watch your feet pyon.',
     },
-    imageUrl: 'https://images.unsplash.com/photo-1448375240586-882707db888b?q=80&w=800',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6),
     likes: 61,
     comments: [
@@ -355,7 +353,6 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '守矢の風鈴を青銅音色に替えたよ。参道の露、滑らないように拭いてね。',
       en: 'Moriya wind chimes are new bronze—wipe the dew on the path so no one slips.',
     },
-    imageUrl: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?q=80&w=800',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 15),
     likes: 49,
     comments: [
@@ -390,7 +387,6 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
       ja: '湖でひんやり石を拾った。早苗に文鎮って渡したら冷凍団子みたいって。',
       en: 'Found a chilly pebble in the lake—gave Sanae as a paperweight, she said it’s like frozen dango.',
     },
-    imageUrl: '/moments/suwako-lake-moment.png',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 11),
     likes: 55,
     comments: [
@@ -441,3 +437,7 @@ export const CHARACTER_SEED_MOMENTS: Moment[] = [
     ],
   },
 ];
+
+export const CHARACTER_SEED_MOMENTS: Moment[] = RAW_CHARACTER_SEED_MOMENTS.map(m =>
+  m.authorType === 'character' ? { ...m, imageUrl: `/moments/${m.id}.png` } : m
+);

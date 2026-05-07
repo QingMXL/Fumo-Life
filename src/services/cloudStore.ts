@@ -516,7 +516,7 @@ export async function ensureSeedCharacterMoments(seed: Moment[]) {
     .select('id, character_id, text_zh, image_url')
     .eq('author_type', 'character');
   if (error) throw error;
-  const byCharacterZh = new Map<string, { id: string; image_url: string | null }>();
+  const byCharacterZh = new Map<string, Array<{ id: string; image_url: string | null }>>();
   for (const r of (existing ?? []) as Array<{
     id: string;
     character_id: string | null;
@@ -524,7 +524,9 @@ export async function ensureSeedCharacterMoments(seed: Moment[]) {
     image_url: string | null;
   }>) {
     const k = `${r.character_id ?? ''}|${r.text_zh}`;
-    if (!byCharacterZh.has(k)) byCharacterZh.set(k, { id: r.id, image_url: r.image_url });
+    const arr = byCharacterZh.get(k) ?? [];
+    arr.push({ id: r.id, image_url: r.image_url });
+    byCharacterZh.set(k, arr);
   }
 
   const characterSeeds = seed.filter(m => m.authorType === 'character');
@@ -544,11 +546,13 @@ export async function ensureSeedCharacterMoments(seed: Moment[]) {
   for (const m of characterSeeds) {
     const k = seedIdentityKey(m);
     if (!k) continue;
-    const row = byCharacterZh.get(k);
+    const rows = byCharacterZh.get(k) ?? [];
     const nextImg = m.imageUrl ?? null;
-    if (row) {
-      if ((row.image_url ?? '') !== (nextImg ?? '')) {
-        imagePatches.push({ id: row.id, image_url: nextImg });
+    if (rows.length > 0) {
+      for (const row of rows) {
+        if ((row.image_url ?? '') !== (nextImg ?? '')) {
+          imagePatches.push({ id: row.id, image_url: nextImg });
+        }
       }
       continue;
     }
