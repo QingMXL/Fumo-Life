@@ -16,41 +16,60 @@
 
 ## What it is
 
-**Fumo² Life** is a cozy, AI-driven social companion web app: you chat with Touhou characters as if they lived next door in **Fumo form**, browse a **Discover** feed of their “moments,” and keep a personal **album** of images from the feed, your own posts, and plush scene shots from chat.
+**Fumo² Life** is an AI-driven companion app where you live alongside the residents of **Gensokyo** — each one woken up in a **Fumo plush body**. You hold 1:1 conversations with them, watch their day unfold through a **Moments** feed, and keep an **album** of the images you collect along the way.
 
-It is built for **daily-life roleplay**—warm, in-lore tone without leaning on “I’m a plushie” meta—and ships with **中文 / 日本語 / English** UI and model prompts tuned per language.
+It ships with **中文 / 日本語 / English** UI, with each character's voice tuned per language.
 
 ---
 
-## Features & highlights
+## Not just a chatbot
+
+Most "AI character" apps are one model behind a chat box. Fumo² Life is built around characters, not endpoints:
+
+- **Defined personalities, grounded in canon.** Every resident is written against the *Touhou Project* worldview with their own voice and manner — and **long-term memory** of your shared history, so the relationship carries forward instead of resetting each session.
+- **An in-world premise.** They are Gensokyo residents living in **Fumo form** — the roleplay stays warm and daily-life, never leaning on "I'm a plushie" meta. You're not talking to a chat interface; you're keeping company with someone who happens to be in a plush body.
+- **A life of their own.** Characters autonomously publish **Moments** — image-and-text snapshots from scenes around the world — and can send you **custom-made photos** in the middle of a conversation.
+
+---
+
+## Features
 
 ### Messaging
 
-- **1:1 threads** with each character: typing indicators, gifts, stickers / kaomoji, optional **AI-generated scene images** (Gemini image model, with optional **Nano Banana** endpoint if you configure it).
-- **Replies** use per-character style prompts and **anti-repeat** hints so different roles are less likely to send the same line; proactive “incoming” messages use a **cross-character** memory list to reduce copy-paste chatter across the cast.
-- **Bond** levels and **unread** previews persist in the cloud; chat history is stored in **Supabase** and mirrored in the browser for resilience (slow network or brief outages won’t wipe the thread you were just reading).
+- **1:1 threads** with each character: typing indicators, gifts, stickers / kaomoji, and **AI-generated scene images** sent in-chat.
+- **Distinct voices.** Per-character style prompts plus **anti-repeat** hints keep replies in character and stop different residents from sending the same line. Proactive "incoming" messages share a **cross-character** memory so the cast doesn't copy-paste each other.
+- **Bond & memory.** Bond levels, conversation previews, and unread state persist in the cloud; chat history is stored in **Supabase** and mirrored locally so a flaky connection won't wipe the thread you were just reading.
 
-### Discover (Moments)
+### Moments (Discover)
 
-- A **Moments** feed mixing **seed posts** from the cast (with local artwork under `public/moments/`) and **your own** text/image posts.
-- **Likes** and **comments** (you, characters, and AI-generated replies on your posts). Unread-style cues for **new character comments** on **your** moments.
-- User photos are stored as **persisted image data** (not fragile `blob:` URLs) so images still load after refresh.
+- A social feed where the cast **autonomously posts** image-and-text moments from varied scenes, mixed with **your own** text/image posts.
+- **Likes and comments** — from you, from characters, and AI-written replies on your posts — with unread cues when a character comments on **your** moment.
+- User photos are stored as **persisted image data** (not fragile `blob:` URLs), so they still load after a refresh.
 
 ### Me & album
 
-- Profile, language, notifications placeholders, privacy blurb, **clear all chats**, and **switch user**.
-- **Album** aggregates: Discover seed art, images from **your** moments, and **AI / plush** images from chat—so the gallery reflects what you’ve actually collected in-app.
+- Profile, language switch, privacy blurb, **clear all chats**, and **switch user**.
+- The **album** aggregates everything you've collected in-app: Moments artwork, images from your own posts, and the scene photos characters sent you in chat.
 
 ### Account & data
 
-- **Register / login** with username + password (password hashed client-side; see `schema.sql` notes for production hardening).
-- **Switch user** ends the session and **clears that account’s app data** in Supabase (messages, your moments, likes, bonds, unread, etc.) plus local caches—intended as a **fresh start** when you hand the device to another “keeper” or start over.
-- Near **real-time** updates for messages and moments where Supabase Realtime is enabled.
+- **Register / login** with username + password (hashed client-side; see `supabase/schema.sql` for production-hardening notes).
+- **Switch user** ends the session and clears that account's app data plus local caches — a clean **fresh start** when handing the device to another keeper.
+- **Near-real-time** updates for messages and moments where Supabase Realtime is enabled.
 
-### Look & feel
+---
 
-- **Cream “stitched” UI**: soft cards, sky-style headers, chat bubbles that read like a cozy diary—not a flat sticker pack.
-- **Fumo-forward visuals**: prompts and art direction aim for **3D plush** (pile, stitching, dot eyes without harsh speculars), not generic chibi stickers.
+## Character imagery pipeline
+
+The plush imagery is the heart of the experience, so the moments and in-chat photos are produced by a dedicated generation pipeline rather than generic stock art:
+
+- **Per-character LoRA models.** Each character gets a custom LoRA trained from just **15–20 multi-angle references**, trainable and deployable in minutes and designed to scale to **10+ characters** in parallel — so every resident keeps a consistent, recognizable plush identity.
+- **ComfyUI + Flux workflow.** A multi-step text-to-image flow with controllable **outfit, scene, lighting, and cross-IP elements**. Each request renders a **batch and auto-selects the best** result to lift quality.
+- **Pre-generation pool.** Because high-fidelity generation is slow, a background service keeps a **buffer of ready-to-use assets per character**, so Moments and chat images appear **instantly** instead of waiting on live generation.
+- **In-character captioning.** Each image is paired with a caption rewritten **in the character's voice** by a lightweight model, keeping tone consistent while cutting captioning cost dramatically.
+- **Resilient storage.** Generated assets are backed up across a local server and cloud object storage, with token-gated access and efficient retrieval at scale.
+
+> The app also supports a **Gemini image model fallback**, so it stays fully functional even without the custom backend configured.
 
 ---
 
@@ -59,11 +78,11 @@ It is built for **daily-life roleplay**—warm, in-lore tone without leaning on 
 | Area | Choice |
 |------|--------|
 | Frontend | React 19, Vite, Tailwind, Motion, React Router |
-| AI | Google **Gemini** (`@google/genai`) for chat, moment comments, and image generation |
+| Conversational AI | Google **Gemini** (`@google/genai`) for chat and moment comments |
+| Character imagery | Custom **LoRA + ComfyUI/Flux** pipeline with a pre-generation pool; **Gemini image model** fallback |
 | Backend / sync | **Supabase** (Postgres + optional Realtime) |
-| Optional images | `VITE_NANO_BANANA_ENDPOINT` + `VITE_NANO_BANANA_API_KEY` for an external image API |
 
-> Local dev: set `GEMINI_API_KEY` in `.env.local`. The app reads Supabase keys from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+> Local dev reads `GEMINI_API_KEY`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY` from `.env.local`. An optional custom image backend can be wired via the variables in `.env.example`.
 
 ---
 
@@ -77,21 +96,17 @@ cd Fumo-Life
 npm install
 ```
 
-Copy the env template and set your keys:
+Copy the env template and fill in your own keys:
 
 ```bash
 cp .env.example .env.local
-# Edit .env.local and set:
-# GEMINI_API_KEY
-# VITE_SUPABASE_URL
-# VITE_SUPABASE_ANON_KEY
-# Optional: VITE_NANO_BANANA_ENDPOINT, VITE_NANO_BANANA_API_KEY
+# Edit .env.local — see the file for the full list of variables.
 ```
 
-Initialize Supabase tables:
+Initialize the Supabase tables:
 
 ```sql
--- Run all SQL in supabase/schema.sql inside Supabase SQL Editor
+-- Run all SQL in supabase/schema.sql inside the Supabase SQL Editor
 ```
 
 Run the dev server:
@@ -106,13 +121,13 @@ Other scripts: `npm run build`, `npm run preview`, `npm run lint`.
 
 ## Contributing
 
-PRs welcome—especially **localized prompt tuning** per character to keep voices distinct and on-lore.
+PRs welcome — especially **localized prompt tuning** per character to keep voices distinct and on-lore.
 
 When adding a **new Fumo**, follow the Fumo form spec in the PRD. Strong image prompts usually specify:
 
-- **Form** — high-detail 3D physical plush  
-- **Materials** — soft pile, velvet, wool, visible stitching  
-- **Light** — soft side light, diffuse  
+- **Form** — high-detail 3D physical plush
+- **Materials** — soft pile, velvet, wool, visible stitching
+- **Light** — soft side light, diffuse
 - **Face** — dot eyes (no highlight catchlights), embroidered mouth, etc.
 
 **Example prompt** (replace `[CHARACTER DETAILS HERE]`):
@@ -125,7 +140,7 @@ When adding a **new Fumo**, follow the Fumo form spec in the PRD. Strong image p
 
 ## Acknowledgements
 
-- **ZUN 上海アリス幻樂団** — *Touhou Project*  
+- **ZUN 上海アリス幻樂団** — *Touhou Project*
 - **Fumo designers**
 
 ---
