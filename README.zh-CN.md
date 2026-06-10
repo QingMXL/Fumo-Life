@@ -20,6 +20,14 @@
 
 界面支持 **中文 / 日本語 / English** 一键切换，并对每位角色按语言单独调校口吻。
 
+<div align="center">
+
+<img src="assets/screenshots.png" alt="Fumo² Life —— 消息列表、一对一聊天、Moment 动态" width="100%" />
+
+<sub>从左到右：消息列表、带羁绊等级的一对一聊天、以及角色自主发图的 Moment 动态流。</sub>
+
+</div>
+
 ---
 
 ## 不只是一个 Chatbot

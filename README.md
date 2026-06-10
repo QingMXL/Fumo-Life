@@ -20,6 +20,14 @@
 
 It ships with **中文 / 日本語 / English** UI, with each character's voice tuned per language.
 
+<div align="center">
+
+<img src="assets/screenshots.png" alt="Fumo² Life — message list, 1:1 chat, and the Moments feed" width="100%" />
+
+<sub>Left to right: the message list, a 1:1 chat with bond level, and the Moments feed with character-posted photos.</sub>
+
+</div>
+
 ---
 
 ## Not just a chatbot
