@@ -5,6 +5,63 @@ const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 const NANO_BANANA_ENDPOINT = import.meta.env.VITE_NANO_BANANA_ENDPOINT as string | undefined;
 const NANO_BANANA_API_KEY = import.meta.env.VITE_NANO_BANANA_API_KEY as string | undefined;
 
+// 自定义图像后端：建任务 -> 轮询取结果。endpoint/key 见 VITE_GMK_* 环境变量。
+const GMK_API_BASE = (import.meta.env.VITE_GMK_API_BASE as string | undefined)?.replace(/\/+$/, '');
+const GMK_API_KEY = import.meta.env.VITE_GMK_API_KEY as string | undefined;
+const GMK_POLL_INTERVAL_MS = 2000;
+const GMK_POLL_TIMEOUT_MS = 180000;
+
+function firstOutputImage(task: unknown): string | null {
+  const out = (task as { output_images?: unknown })?.output_images;
+  if (Array.isArray(out) && typeof out[0] === 'string' && out[0].length > 0) return out[0];
+  return null;
+}
+
+/**
+ * 调用 GMK 图像 API 生成一张图，返回图片 URL；失败或未配置时返回 null。
+ * 流程：POST /tasks 创建任务，若未立即完成则轮询 GET /tasks/{id} 直到 completed/failed。
+ */
+async function generateImageViaGmk(prompt: string): Promise<string | null> {
+  if (!GMK_API_BASE || !GMK_API_KEY) return null;
+  try {
+    const form = new FormData();
+    form.append('prompt', prompt);
+    const createRes = await fetch(`${GMK_API_BASE}/tasks`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${GMK_API_KEY}` },
+      body: form,
+    });
+    if (!createRes.ok) return null;
+    const created = await createRes.json();
+    if (created?.ok === false) return null;
+
+    const task = created?.task;
+    const immediate = firstOutputImage(task);
+    if (immediate) return immediate;
+
+    const taskId = task?.id;
+    const status = task?.status as string | undefined;
+    if (!taskId || status === 'failed') return null;
+
+    const deadline = Date.now() + GMK_POLL_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, GMK_POLL_INTERVAL_MS));
+      const pollRes = await fetch(`${GMK_API_BASE}/tasks/${taskId}`, {
+        headers: { Authorization: `Bearer ${GMK_API_KEY}` },
+      });
+      if (!pollRes.ok) continue;
+      const polled = await pollRes.json();
+      const polledTask = polled?.task;
+      const url = firstOutputImage(polledTask);
+      if (url) return url;
+      if ((polledTask?.status as string | undefined) === 'failed') return null;
+    }
+  } catch {
+    // fallback to other providers
+  }
+  return null;
+}
+
 function laneText(language: Language, zh: string, ja: string, en: string) {
   return language === 'zh' ? zh : language === 'ja' ? ja : en;
 }
@@ -246,7 +303,11 @@ The scene MUST match this text exactly: "${text}".
 Style: soft daylight, cozy, plush texture, no extra text watermark.
 `;
 
-  // Nano Banana 优先（若配置了 endpoint + key）
+  // GMK（Athena Labs）优先：角色 moments 配图走此接口
+  const gmkUrl = await generateImageViaGmk(prompt);
+  if (gmkUrl) return gmkUrl;
+
+  // Nano Banana 次选（若配置了 endpoint + key）
   if (NANO_BANANA_ENDPOINT && NANO_BANANA_API_KEY) {
     try {
       const res = await fetch(NANO_BANANA_ENDPOINT, {
